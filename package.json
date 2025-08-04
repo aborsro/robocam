@@ -1,0 +1,25 @@
+{
+  "name": "babyphone-webrtc-app",
+  "version": "1.0.0",
+  "description": "Einfaches Node.js + WebRTC Babyphone-Demo für Render. - Ein Gerät klickt „Start Senden“ (z. B. iPad im Schlafzimmer) - Anderes Gerät klickt „Start Empfangen“ (z. B. Handy)",
+  "homepage": "https://github.com/aborsro/babyphone-webrtc-app#readme",
+  "bugs": {
+    "url": "https://github.com/aborsro/babyphone-webrtc-app/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aborsro/babyphone-webrtc-app.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.13.0"
+  },
+  "devDependencies": {}
+}

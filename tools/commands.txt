@@ -1,0 +1,11 @@
+cd Z:\xfer\Projects\GitHub\babyphone-webrtc-app
+
+cd /mnt/c/_Data/04-Vmware/xfer/Projects/GitHub/babyphone-webrtc-app
+
+node init
+node start
+node --inspect server.js
+
+git add .
+git commit -m "xxx"
+git push origin main

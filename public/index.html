@@ -30,8 +30,8 @@
     gap: 8px;
   }
   .app-icon {
-    width: 60px;
-    height: 60px;
+    width: 40px;
+    height: 40px;
     border-radius: 12px;
     box-shadow: 0 8px 16px rgba(0,0,0,0.2);
   }
@@ -78,6 +78,7 @@
     object-fit: cover;
   }
 
+ 
 #remoteVideo {
   width: 100%;
   max-width: 100%; /* volle Breite */
@@ -111,19 +112,33 @@
       font-size: 16px;
       cursor: pointer;
     }
+	
+	 .inline-container img {
+      vertical-align: middle;
+      height: 40px; /* Beispielhöhe */
+    }
+
+    .inline-container span {
+      vertical-align: middle;
+      margin-left: 10px;
+	  font-size: 40px;
+    }
 </style>
 </head>
 <body>
 
-<h1>robocam</h1>
-
+  <div class="inline-container">
+    <img src="favicon.ico" alt="App Icon" class="app-icon">
+    <span>robocam</span>
+  </div>
+  </br>
+ 
 <div class="top-bar">
-  <img src="favicon.ico" alt="App Icon" class="app-icon">
   <div class="buttons">
-    <button id="senderBtn" onclick="start('sender')">Sender</button>
-    <button id="receiverBtn" onclick="start('receiver')">Receiver</button>
+    <button id="senderBtn" onclick="start('sender')">send</button>
+    <button id="receiverBtn" onclick="start('receiver')">receive</button>
     <button id="stopBtn" onclick="stopAll()" style="display:none;">Stop</button>
-    <button id="blackoutBtn" onclick="blackoutScreen()" style="background-color:grey;">Blackout</button>
+    <button id="blackoutBtn" onclick="blackoutScreen()" style="background-color:grey;">Off</button>
     <select id="cameraSelect" style="display:none;"></select>
   </div>
   <div id="blackout"></div>
@@ -151,7 +166,7 @@ function blackoutScreen() {
 if (blackOut) {
     blackOut = false;
     document.getElementById('blackout').style.display = 'none';
-	document.getElementById('blackoutBtn').textContent = 'Blackout';
+	document.getElementById('blackoutBtn').textContent = 'Off';
   } else {
     blackOut = true;
     document.getElementById('blackout').style.display = 'block';
@@ -187,8 +202,8 @@ async function start(role) {
   senderBtn.disabled = true;
   receiverBtn.disabled = true;
 
-  senderBtn.textContent = "Sender";
-  receiverBtn.textContent = "Receiver";
+  senderBtn.textContent = "send";
+  receiverBtn.textContent = "receive";
 
   if (role === 'sender') senderBtn.classList.add('active');
   if (role === 'receiver') receiverBtn.classList.add('active');
@@ -266,6 +281,10 @@ async function startLocalStreamAndOffer() {
   } catch (err) {
     try {
       console.error("[DEBUG] try just video", err);
+	  
+	  const select = document.getElementById('cameraSelect');
+      const cameraId = select.value;
+
 	  let constraints = (select.options.length === 1)
         ? { video: { width: { ideal: 1920 }, height: { ideal: 1080 } } }
         : { video: { deviceId: { exact: cameraId }, width: { ideal: 1920 }, height: { ideal: 1080 } } };
@@ -311,8 +330,8 @@ function stopAll() {
   senderBtn.classList.remove('active');
   receiverBtn.classList.remove('active');
 
-  senderBtn.textContent = "Sender";
-  receiverBtn.textContent = "Receiver";
+  senderBtn.textContent = "send";
+  receiverBtn.textContent = "receive";
 
   document.getElementById('cameraSelect').style.display = 'none';
   stopBtn.style.display = 'none';

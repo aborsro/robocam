@@ -144,10 +144,11 @@
   <div id="blackout"></div>
 </div>
 
-<video id="localVideo" autoplay muted playsinline></video>
 <video id="remoteVideo" autoplay playsinline></video>
 
 <script>
+////////////<video id="localVideo" autoplay muted playsinline></video>
+
 console.log("[DEBUG] Initialisiere Babyphone WebRTC App");
 
 const ws = new WebSocket(location.origin.replace(/^http/, 'ws'));
@@ -269,7 +270,7 @@ async function startLocalStreamAndOffer() {
       : { video: { deviceId: { exact: cameraId }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: true };
 	  
     localStream = await navigator.mediaDevices.getUserMedia(constraints);
-    document.getElementById('localVideo').srcObject = localStream;
+               document.getElementById('remoteVideo').srcObject = localStream;
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
     const offer = await pc.createOffer();
@@ -290,7 +291,7 @@ async function startLocalStreamAndOffer() {
         : { video: { deviceId: { exact: cameraId }, width: { ideal: 1920 }, height: { ideal: 1080 } } };
 	  
       localStream = await navigator.mediaDevices.getUserMedia(constraints);
-      document.getElementById('localVideo').srcObject = localStream;
+                  document.getElementById('remoteVideo').srcObject = localStream;
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
       const offer = await pc.createOffer();
@@ -336,7 +337,7 @@ function stopAll() {
   document.getElementById('cameraSelect').style.display = 'none';
   stopBtn.style.display = 'none';
 
-  document.getElementById('localVideo').srcObject = null;
+////////////////  document.getElementById('localVideo').srcObject = null;
   document.getElementById('remoteVideo').srcObject = null;
 }
 </script>

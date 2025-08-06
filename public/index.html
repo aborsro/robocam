@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="de">
 <head>
@@ -18,8 +19,8 @@
     display: flex;
     align-items: left;
     justify-content: left;
-    gap: 10px; /* Abstand zwischen Icon und Buttons */
-    flex-wrap: wrap; /* umbricht auf kleinen Bildschirmen */
+    gap: 10px;
+    flex-wrap: wrap;
     width: 100%;
     max-width: 600px;
     margin-bottom: 10px;
@@ -44,8 +45,6 @@
     font-size: 1.0em;
     padding: 8px 16px;
     margin: 0;
-    width: auto;
-    max-width: none;
     border: none;
     border-radius: 10px;
     background-color: #4CAF50;
@@ -72,275 +71,232 @@
   }
   video {
     margin-top: 1px;
-     border: 2px solid #333;
+    border: 2px solid #333;
     border-radius: 10px;
     background: black;
     object-fit: cover;
   }
-
- 
-#remoteVideo {
-  width: 100%;
-  max-width: 100%; /* volle Breite */
-}
-
-#localVideo {
-  width: 200px;       /* kleiner Vorschaubild */
-  position: absolute; /* über dem großen Video */
-  top: 20px;
-  right: 20px;
-  border: 2px solid white;
-}
- 
-    /* Blackout overlay style */
-    #blackout {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background-color: black;
-      opacity: 1;
-      z-index: 9999;
-    }
-
-    button {
-      position: relative;
-      z-index: 10000;
-      padding: 10px 20px;
-      font-size: 16px;
-      cursor: pointer;
-    }
-	
-	 .inline-container img {
-      vertical-align: middle;
-      height: 40px; /* Beispielhöhe */
-    }
-
-    .inline-container span {
-      vertical-align: middle;
-      margin-left: 10px;
-	  font-size: 40px;
-    }
+  #remoteVideo {
+    width: 100%;
+    max-width: 100%;
+  }
+  #localVideo {
+    width: 200px;
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    border: 2px solid white;
+  }
+  #blackout {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: black;
+    opacity: 1;
+    z-index: 9999;
+  }
+  .inline-container img {
+    vertical-align: middle;
+    height: 40px;
+  }
+  .inline-container span {
+    vertical-align: middle;
+    margin-left: 10px;
+    font-size: 40px;
+  }
 </style>
 </head>
 <body>
-
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
     <span>robocam</span>
   </div>
-  </br>
- 
-<div class="top-bar">
-  <div class="buttons">
-    <button id="senderBtn" onclick="start('sender')">send</button>
-    <button id="receiverBtn" onclick="start('receiver')">receive</button>
-    <button id="stopBtn" onclick="stopAll()" style="display:none;">Stop</button>
-    <button id="blackoutBtn" onclick="blackoutScreen()" style="background-color:grey;">Off</button>
-    <select id="cameraSelect" style="display:none;"></select>
+  <br>
+  <div class="top-bar">
+    <div class="buttons">
+      <button id="senderBtn" onclick="start('sender')">send</button>
+      <button id="receiverBtn" onclick="start('receiver')">receive</button>
+      <button id="stopBtn" onclick="stopAll()" style="display:none;">Stop</button>
+      <button id="blackoutBtn" onclick="blackoutScreen()" style="background-color:grey;">Off</button>
+      <select id="cameraSelect" style="display:none;"></select>
+    </div>
+    <div id="blackout"></div>
   </div>
-  <div id="blackout"></div>
-</div>
+  <video id="remoteVideo" autoplay playsinline></video>
+  <script>
+    console.log("[DEBUG] Initialisiere Babyphone WebRTC App");
 
-<video id="remoteVideo" autoplay playsinline></video>
+    const ws = new WebSocket(location.origin.replace(/^http/, 'ws'));
+    let pc;
+    let localOfferSent = false;
+    let localStream;
+    let messageBuffer = [];
+    let blackOut = false;
 
-<script>
-////////////<video id="localVideo" autoplay muted playsinline></video>
+    ws.onopen = () => console.log("[DEBUG] WebSocket verbunden");
+    ws.onerror = e => console.error("[DEBUG] WebSocket Fehler:", e);
+    ws.onclose = () => console.log("[DEBUG] WebSocket Verbindung geschlossen");
+    ws.onmessage = handleMessage;
 
-console.log("[DEBUG] Initialisiere Babyphone WebRTC App");
-
-const ws = new WebSocket(location.origin.replace(/^http/, 'ws'));
-let pc;
-let localOfferSent = false;
-let localStream;
-let blackOut = false;
-
-ws.onopen = () => console.log("[DEBUG] WebSocket verbunden");
-ws.onerror = e => console.error("[DEBUG] WebSocket Fehler:", e);
-ws.onclose = () => console.log("[DEBUG] WebSocket Verbindung geschlossen");
-
-ws.onmessage = handleMessage;
-
-function blackoutScreen() {
-if (blackOut) {
-    blackOut = false;
-    document.getElementById('blackout').style.display = 'none';
-	document.getElementById('blackoutBtn').textContent = 'Off';
-  } else {
-    blackOut = true;
-    document.getElementById('blackout').style.display = 'block';
-	document.getElementById('blackoutBtn').textContent = 'Display';
-  }
-}
-
-
-async function handleMessage(msg) {
-  let text = msg.data instanceof Blob ? await msg.data.text() : msg.data;
-  let data;
-  try { data = JSON.parse(text); } catch { return; }
-
-  if (data.sdp) {
-    await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-    if (data.sdp.type === 'offer') {
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      ws.send(JSON.stringify({ sdp: pc.localDescription }));
+    function blackoutScreen() {
+      blackOut = !blackOut;
+      document.getElementById('blackout').style.display = blackOut ? 'block' : 'none';
+      document.getElementById('blackoutBtn').textContent = blackOut ? 'Display' : 'Off';
     }
-  } else if (data.candidate) {
-    await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-  }
-}
 
-async function start(role) {
-  console.log(`[DEBUG] Starte als ${role}`);
+    async function handleMessage(msg) {
+      let text = msg.data instanceof Blob ? await msg.data.text() : msg.data;
+      let data;
+      try { data = JSON.parse(text); } catch { return; }
 
-  const senderBtn = document.getElementById('senderBtn');
-  const receiverBtn = document.getElementById('receiverBtn');
-  const stopBtn = document.getElementById('stopBtn');
+      if (!pc) {
+        console.warn("[DEBUG] PeerConnection noch nicht bereit â€“ Puffer speichert Nachricht");
+        messageBuffer.push(data);
+        return;
+      }
+      await processMessage(data);
+    }
 
-  senderBtn.disabled = true;
-  receiverBtn.disabled = true;
+    async function processMessage(data) {
+      if (data.sdp) {
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+          if (data.sdp.type === 'offer') {
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            ws.send(JSON.stringify({ sdp: pc.localDescription }));
+          }
+        } catch (err) {
+          console.error("[DEBUG] Fehler bei SDP:", err);
+        }
+      } else if (data.candidate) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        } catch (err) {
+          console.error("[DEBUG] Fehler bei ICE:", err);
+        }
+      }
+    }
 
-  senderBtn.textContent = "send";
-  receiverBtn.textContent = "receive";
+    async function start(role) {
+      console.log(`[DEBUG] Starte als ${role}`);
 
-  if (role === 'sender') senderBtn.classList.add('active');
-  if (role === 'receiver') receiverBtn.classList.add('active');
+      const senderBtn = document.getElementById('senderBtn');
+      const receiverBtn = document.getElementById('receiverBtn');
+      const stopBtn = document.getElementById('stopBtn');
 
-  stopBtn.style.display = 'block';
+      senderBtn.disabled = true;
+      receiverBtn.disabled = true;
+      senderBtn.textContent = "send";
+      receiverBtn.textContent = "receive";
 
-  pc = new RTCPeerConnection();
+      if (role === 'sender') senderBtn.classList.add('active');
+      if (role === 'receiver') receiverBtn.classList.add('active');
+      stopBtn.style.display = 'block';
 
-  pc.ontrack = e => {
-    console.log("[DEBUG] ontrack ausgelöst, Stream erhalten:", e.streams[0]);
-    document.getElementById('remoteVideo').srcObject = e.streams[0];
-  };
-  pc.onicecandidate = e => {
-    if (e.candidate) ws.send(JSON.stringify({ candidate: e.candidate }));
-  };
-
-  if (role === 'sender') {
-    const select = document.getElementById('cameraSelect');
-    select.style.display = 'block';
-    await fillCameraSelect();
-
-    if (select.options.length === 1) {
-      console.log("[DEBUG] Nur eine Kamera gefunden – starte direkt");
-      await startLocalStreamAndOffer();
-    } else {
-      select.onchange = async () => {
-        console.log("[DEBUG] Kamera gewählt:", select.value);
-        await startLocalStreamAndOffer();
+      pc = new RTCPeerConnection();
+      pc.ontrack = e => document.getElementById('remoteVideo').srcObject = e.streams[0];
+      pc.onicecandidate = e => {
+        if (e.candidate) ws.send(JSON.stringify({ candidate: e.candidate }));
       };
+
+      for (const buffered of messageBuffer) await processMessage(buffered);
+      messageBuffer = [];
+
+      if (role === 'sender') {
+        const select = document.getElementById('cameraSelect');
+        select.style.display = 'block';
+        await fillCameraSelect();
+
+        if (select.options.length === 1) {
+          await startLocalStreamAndOffer();
+        } else {
+          select.onchange = async () => await startLocalStreamAndOffer();
+        }
+      }
     }
-  }
 
-  if (role === 'receiver' && !localOfferSent) {
-    console.log("[DEBUG] Bereit Offers vom anderen zu empfangen...");
-  }
-}
+    async function fillCameraSelect() {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter(d => d.kind === 'videoinput');
+      const select = document.getElementById('cameraSelect');
+      select.innerHTML = '';
+      videoDevices.forEach(device => {
+        const option = document.createElement('option');
+        option.value = device.deviceId;
+        option.text = device.label || `Kamera ${select.length + 1}`;
+        select.appendChild(option);
+      });
+    }
 
-async function fillCameraSelect() {
-  const devices = await navigator.mediaDevices.enumerateDevices();
-  const videoDevices = devices.filter(d => d.kind === 'videoinput');
-  console.log("[DEBUG] Gefundene Kameras:", videoDevices);
+    async function startLocalStreamAndOffer() {
+      if (localOfferSent) return;
+      localOfferSent = true;
 
-  const select = document.getElementById('cameraSelect');
-  select.innerHTML = '';
-  videoDevices.forEach(device => {
-    const option = document.createElement('option');
-    option.value = device.deviceId;
-    option.text = device.label || `Kamera ${select.length + 1}`;
-    select.appendChild(option);
-  });
-}
-
-async function startLocalStreamAndOffer() {
-  if (localOfferSent) return;
-  localOfferSent = true;
-
-  try {
-    const select = document.getElementById('cameraSelect');
-    const cameraId = select.value;
-
-    let constraints = (select.options.length === 1)
-      ? { video: { width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: true  }
-      : { video: { deviceId: { exact: cameraId }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: true };
-	  
-    localStream = await navigator.mediaDevices.getUserMedia(constraints);
-               document.getElementById('remoteVideo').srcObject = localStream;
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    ws.send(JSON.stringify({ sdp: pc.localDescription }));
-
-    select.style.display = 'none';
-
-  } catch (err) {
-    try {
-      console.error("[DEBUG] try just video", err);
-	  
-	  const select = document.getElementById('cameraSelect');
+      const select = document.getElementById('cameraSelect');
       const cameraId = select.value;
+      let constraints;
 
-	  let constraints = (select.options.length === 1)
-        ? { video: { width: { ideal: 1920 }, height: { ideal: 1080 } } }
-        : { video: { deviceId: { exact: cameraId }, width: { ideal: 1920 }, height: { ideal: 1080 } } };
-	  
-      localStream = await navigator.mediaDevices.getUserMedia(constraints);
-                  document.getElementById('remoteVideo').srcObject = localStream;
-      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+      try {
+        constraints = (select.options.length === 1)
+          ? { video: { width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: true }
+          : { video: { deviceId: { exact: cameraId }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: true };
 
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      ws.send(JSON.stringify({ sdp: pc.localDescription }));
+        localStream = await navigator.mediaDevices.getUserMedia(constraints);
+        document.getElementById('remoteVideo').srcObject = localStream;
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
-      select.style.display = 'none';
-    } catch (err) {
-        console.error("[DEBUG] Fehler beim Starten:", err);
-		alert("HINT: did you start receiver first ?");
-		alert("HINT: app missing access to camera / microphone ?");
-	}
-  }
-}
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        ws.send(JSON.stringify({ sdp: pc.localDescription }));
+        select.style.display = 'none';
+      } catch (err) {
+        console.error("[DEBUG] fallback only video", err);
+        try {
+          constraints = { video: { deviceId: { exact: cameraId }, width: { ideal: 1920 }, height: { ideal: 1080 } } };
+          localStream = await navigator.mediaDevices.getUserMedia(constraints);
+          document.getElementById('remoteVideo').srcObject = localStream;
+          localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          ws.send(JSON.stringify({ sdp: pc.localDescription }));
+          select.style.display = 'none';
+        } catch (e) {
+          console.error("[DEBUG] Fehler beim Starten:", e);
+          alert("HINT: did you start receiver first?");
+          alert("HINT: app missing access to camera / microphone?");
+        }
+      }
+    }
 
-function stopAll() {
-  console.log("[DEBUG] Stoppe alles");
+    function stopAll() {
+      console.log("[DEBUG] Stoppe alles");
 
-  if (localStream) {
-    localStream.getTracks().forEach(track => track.stop());
-    localStream = null;
-  }
-
-  if (pc) {
-    pc.close();
-    pc = null;
-  }
-
-  localOfferSent = false;
-
-  const senderBtn = document.getElementById('senderBtn');
-  const receiverBtn = document.getElementById('receiverBtn');
-  const stopBtn = document.getElementById('stopBtn');
-
-  senderBtn.disabled = false;
-  receiverBtn.disabled = false;
-  senderBtn.classList.remove('active');
-  receiverBtn.classList.remove('active');
-
-  senderBtn.textContent = "send";
-  receiverBtn.textContent = "receive";
-
-  document.getElementById('cameraSelect').style.display = 'none';
-  stopBtn.style.display = 'none';
-
-////////////////  document.getElementById('localVideo').srcObject = null;
-  document.getElementById('remoteVideo').srcObject = null;
-}
-</script>
-
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
+      }
+      if (pc) {
+        pc.close();
+        pc = null;
+      }
+      localOfferSent = false;
+      const senderBtn = document.getElementById('senderBtn');
+      const receiverBtn = document.getElementById('receiverBtn');
+      const stopBtn = document.getElementById('stopBtn');
+      senderBtn.disabled = false;
+      receiverBtn.disabled = false;
+      senderBtn.classList.remove('active');
+      receiverBtn.classList.remove('active');
+      senderBtn.textContent = "send";
+      receiverBtn.textContent = "receive";
+      document.getElementById('cameraSelect').style.display = 'none';
+      stopBtn.style.display = 'none';
+      document.getElementById('remoteVideo').srcObject = null;
+    }
+  </script>
 </body>
 </html>

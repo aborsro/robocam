@@ -87,23 +87,16 @@
     right: 20px;
     border: 2px solid white;
   }
-  #blackoutBtn {
-    display: block;
-    background-color: grey;
+  #blackout {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: black;
     opacity: 1;
-    z-index: 99999;
-  }
-  /* Blackout overlay style */
-  #blackoutArea {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background-color: black;
-      opacity: 1;
-      z-index: 9999;
+    z-index: 9999;
   }
   .inline-container img {
     vertical-align: middle;
@@ -130,7 +123,7 @@
       <button id="blackoutBtn" onclick="blackoutScreen()" style="background-color:grey;">Off</button>
       <select id="cameraSelect" style="display:none;"></select>
     </div>
-    <div id="blackoutArea"></div>
+    <div id="blackout"></div>
   </div>
   <video id="remoteVideo" autoplay playsinline></video>
   <script>
@@ -150,7 +143,7 @@
 
     function blackoutScreen() {
       blackOut = !blackOut;
-      document.getElementById('blackoutArea').style.display = blackOut ? 'block' : 'none';
+      document.getElementById('blackout').style.display = blackOut ? 'block' : 'none';
       document.getElementById('blackoutBtn').textContent = blackOut ? 'Display' : 'Off';
     }
 

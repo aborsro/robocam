@@ -10,6 +10,7 @@
     font-family: sans-serif;
     display: flex;
     flex-direction: column;
+    align-items: left;
     padding: 20px;
     background: linear-gradient(to bottom, #f4f4f4, #e0e0e0);
     min-height: 100vh;
@@ -68,11 +69,6 @@
   #stopBtn:hover:enabled {
     background-color: #d32f2f;
   }
-  #blackoutBtn {
-    position: flex;
-    background-color: gray;
-    z-index: 99999;
-  }
   video {
     margin-top: 1px;
     border: 2px solid #333;
@@ -91,7 +87,7 @@
     right: 20px;
     border: 2px solid white;
   }
-  #blackoutArea {
+  #blackout {
     display: none;
     position: fixed;
     top: 0;
@@ -127,7 +123,7 @@
       <button id="blackoutBtn" onclick="blackoutScreen()" style="background-color:grey;">Off</button>
       <select id="cameraSelect" style="display:none;"></select>
     </div>
-    <div id="blackoutArea"></div>
+    <div id="blackout"></div>
   </div>
   <video id="remoteVideo" autoplay playsinline></video>
   <script>
@@ -147,7 +143,7 @@
 
     function blackoutScreen() {
       blackOut = !blackOut;
-      document.getElementById('blackoutArea').style.display = blackOut ? 'block' : 'none';
+      document.getElementById('blackout').style.display = blackOut ? 'block' : 'none';
       document.getElementById('blackoutBtn').textContent = blackOut ? 'Display' : 'Off';
     }
 

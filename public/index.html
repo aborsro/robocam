@@ -118,7 +118,7 @@
 <body>
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-    <span>robocam</span>v02
+    <span>robocam</span>v03
   </div>
   <br>
   <div class="top-bar">
@@ -282,6 +282,7 @@ async function testDevices() {
       select.style.display = 'block';
       await fillCameraSelect();
       document.getElementById('receiverBtn').style.display = 'none';
+      document.getElementById('remoteVideo').style.display = 'none';
 
       if (select.options.length === 1) {
         await startLocalStreamAndOffer();

@@ -136,11 +136,15 @@
     <div id="blackoutArea"></div>
   </div>
   <video id="remoteVideo" autoplay playsinline></video>
-  <video id="localVideo" autoplay muted playsinline style="display:none;"></video>
+  <video id="localVideo" autoplay playsinline></video>
   <div id="statusDisplay">Status: idle</div>
 
 <script>
-  console.log("[DEBUG] Initialisiere robocam WebRTC App");
+
+  // disabled
+  //  <video id="localVideo" autoplay muted playsinline style="display:none;"></video>
+  
+  console.log("[DEBUG] Initialisiere robocam App");
 
   // --- App State ---
   const ConnectionState = {
@@ -158,7 +162,18 @@
     document.getElementById('statusDisplay').textContent = `Status: ${state}`;
     document.getElementById('reconnectBtn').style.display = state === ConnectionState.ERROR ? 'block' : 'none';
   }
-
+  
+async function testDevices() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    stream.getTracks().forEach(track => track.stop());
+    console.log("Zugriff funktioniert");
+  } catch (err) {
+    console.error("Kein Zugriff:", err.name);
+  }
+}
+  
+  
   // --- Variables ---
   let pc;
   let localStream;
@@ -264,6 +279,8 @@
     };
 
     if (role === 'sender') {
+	  testDevices();
+
       const select = document.getElementById('cameraSelect');
       select.style.display = 'block';
       await fillCameraSelect();
@@ -279,6 +296,8 @@
     }
 
     if (role === 'receiver') {
+	  testDevices();
+
       document.getElementById('senderBtn').style.display = 'none';
       document.getElementById('blackoutArea').style.display = 'none';
     }

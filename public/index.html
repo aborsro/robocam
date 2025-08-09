@@ -118,7 +118,7 @@
 <body>
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-    <span>robocam</span>v03
+    <span>robocam</span>v04
   </div>
   <br>
   <div class="top-bar">
@@ -295,7 +295,7 @@ async function testDevices() {
 
     if (role === 'receiver') {
 	  testDevices();
-
+      document.getElementById('localVideo').style.display = 'none';
       document.getElementById('senderBtn').style.display = 'none';
       document.getElementById('blackoutArea').style.display = 'none';
     }

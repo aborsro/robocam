@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>robocam-02</title>
+<title>robocam</title>
 <style>
   body {
     font-family: sans-serif;
@@ -72,20 +72,17 @@
   video {
     margin-top: 1px;
     border: 2px solid #333;
-    border-radius: 10px;
+    border-radius: 5px;
     background: black;
     object-fit: cover;
   }
   #remoteVideo {
-    width: 100%;
-    max-width: 100%;
+    width: 80%;
+    max-width: 80%;
   }
   #localVideo {
-    width: 200px;
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    border: 2px solid white;
+    width: 80%;
+    max-width: 80%;
   }
   #blackoutBtn {
     background-color: grey;
@@ -121,7 +118,7 @@
 <body>
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-    <span>robocam</span>
+    <span>robocam</span>v02
   </div>
   <br>
   <div class="top-bar">
@@ -274,7 +271,7 @@ async function testDevices() {
       console.log("[DEBUG] ICE state:", pc.iceConnectionState);
       if (['disconnected', 'failed'].includes(pc.iceConnectionState)) {
         setAppState(ConnectionState.ERROR);
-        attemptReconnectWithDelay(5);
+        attemptReconnectWithDelay(3);
       }
     };
 

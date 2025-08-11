@@ -346,6 +346,7 @@ async function testDevices() {
       };
       localStream = await navigator.mediaDevices.getUserMedia(constraints);
       document.getElementById('localVideo').style.display = 'block';
+      document.getElementById('remoteVideo').style.display = 'block';
       document.getElementById('localVideo').srcObject = localStream;
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 

@@ -123,7 +123,7 @@
 <body>
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-    <span>robocam</span>v05
+    <span>robocam</span>v06
   </div>
   <br>
   <div class="top-bar">
@@ -389,7 +389,7 @@ async function testDevices() {
     start(myRole);
   }
 
-  function attemptReconnectWithDelay(seconds = 5) {
+  function attemptReconnectWithDelay(seconds = 1) {
     let countdown = seconds;
     const interval = setInterval(() => {
       if (countdown <= 0) {

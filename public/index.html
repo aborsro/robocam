@@ -89,6 +89,11 @@
     opacity: 1;
     z-index: 99999;
   }
+  #audioBtn {
+    background-color: grey;
+    opacity: 1;
+    z-index: 99999;
+  }
   #blackoutArea {
     display: none;
     position: fixed;
@@ -118,7 +123,7 @@
 <body>
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-    <span>robocam</span>v04
+    <span>robocam</span>v05
   </div>
   <br>
   <div class="top-bar">
@@ -126,6 +131,7 @@
       <button id="senderBtn" onclick="start('sender')">send</button>
       <button id="receiverBtn" onclick="start('receiver')">receive</button>
       <button id="stopBtn" onclick="stopAll()" style="display:none;">Stop</button>
+      <button id="audioBtn" onclick="toggleAudio()">Audio On</button>
       <button id="blackoutBtn" onclick="blackoutScreen()">Off</button>
       <button id="reconnectBtn" onclick="attemptReconnect()" style="display:none;">Erneut verbinden</button>
       <select id="cameraSelect" style="display:none;"></select>
@@ -160,6 +166,16 @@
     document.getElementById('reconnectBtn').style.display = state === ConnectionState.ERROR ? 'block' : 'none';
   }
   
+  function toggleAudio() {
+    if (audioSetting) {
+      audioSetting = false;
+      document.getElementById('audioBtn').textContent = `Audio Off`;
+    } else {
+	  audioSetting = true;
+      document.getElementById('audioBtn').textContent = `Audio On`;
+	}
+  } 
+  
 async function testDevices() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -177,6 +193,7 @@ async function testDevices() {
   let localOfferSent = false;
   let blackOut = false;
   let myRole = null;
+  let audioSetting;
   let ws;
   const reconnectInterval = 3000;
 
@@ -271,7 +288,7 @@ async function testDevices() {
       console.log("[DEBUG] ICE state:", pc.iceConnectionState);
       if (['disconnected', 'failed'].includes(pc.iceConnectionState)) {
         setAppState(ConnectionState.ERROR);
-        attemptReconnectWithDelay(3);
+        attemptReconnectWithDelay(1);
       }
     };
 
@@ -281,8 +298,8 @@ async function testDevices() {
       const select = document.getElementById('cameraSelect');
       select.style.display = 'block';
       await fillCameraSelect();
-      document.getElementById('receiverBtn').style.display = 'none';
-      document.getElementById('remoteVideo').style.display = 'none';
+      //document.getElementById('receiverBtn').style.display = 'none';
+      //document.getElementById('remoteVideo').style.display = 'none';
 
       if (select.options.length === 1) {
         await startLocalStreamAndOffer();
@@ -295,8 +312,8 @@ async function testDevices() {
 
     if (role === 'receiver') {
 	  testDevices();
-      document.getElementById('localVideo').style.display = 'none';
-      document.getElementById('senderBtn').style.display = 'none';
+      // document.getElementById('localVideo').style.display = 'none';
+      // document.getElementById('senderBtn').style.display = 'none';
       document.getElementById('blackoutArea').style.display = 'none';
     }
   }
@@ -325,7 +342,7 @@ async function testDevices() {
     try {
       const constraints = {
         video: { deviceId: { exact: cameraId }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-        audio: true
+        audio: audioSetting
       };
       localStream = await navigator.mediaDevices.getUserMedia(constraints);
       document.getElementById('localVideo').style.display = 'block';

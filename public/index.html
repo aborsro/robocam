@@ -1,181 +1,327 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
-  <meta charset="UTF-8" />
-  <title>Robocam with Rooms - Debug Mode</title>
-  <style>
-    body { font-family: sans-serif; background: #111; color: #eee; text-align: center; margin: 0; }
-    video { width: 45%; background: black; margin: 5px; }
-    input, select, button { padding: 5px; margin: 5px; }
-    #log {
-      position: fixed;
-      bottom: 0; left: 0; right: 0;
-      max-height: 150px;
-      background: rgba(0,0,0,0.8);
-      color: #0f0;
-      font-family: monospace;
-      overflow-y: auto;
-      padding: 5px;
-      font-size: 12px;
-      text-align: left;
-      z-index: 10000;
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>robocam</title>
+<style>
+  body {
+    font-family: sans-serif;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    background: linear-gradient(to bottom, #f4f4f4, #e0e0e0);
+    min-height: 100vh;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .app-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+  }
+  h1 {
+    margin: 0;
+    font-size: 1.8em;
+    color: #333;
+  }
+  .top-bar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+    width: 100%;
+    max-width: 600px;
+    margin: 15px 0;
+  }
+  .buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  button, select {
+    font-size: 1em;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 10px;
+    background-color: #808080;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.3s, transform 0.1s;
+  }
+  button:hover:enabled {
+    background-color: #45a049;
+  }
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.8;
+  }
+  button.active {
+    background-color: #00ff00;
+    transform: scale(1.05);
+  }
+  #stopBtn {
+    background-color: #ff0000;
+  }
+  #stopBtn:hover:enabled {
+    background-color: #d32f2f;
+  }
+  #blackoutBtn, #audioBtn {
+    background-color: #666;
+  }
+  video {
+    margin-top: 1px;
+    border: 2px solid #333;
+    border-radius: 5px;
+    background: #000;
+    object-fit: cover;
+    width: 80%;
+    max-width: 80%;
+  }
+  #blackoutArea {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: black;
+    opacity: 1;
+    z-index: 9999;
+  }
+  #statusDisplay {
+    font-weight: bold;
+  }
+</style>
 </head>
 <body>
-  <h1>Robocam WebRTC (Rooms) - Debug Mode</h1>
+  <header>
+    <img src="favicon.ico" alt="App Icon" class="app-icon">
+    <h1>robocam</h1><span>v08</span>
+  </header>
 
-  <div>
-    <input id="roomId" placeholder="Room ID" value="id1">
-    <select id="role">
-      <option value="sender">Sender</option>
-      <option value="receiver">Receiver</option>
-    </select>
-    <button id="connectBtn">Connect</button>
+  <div class="top-bar">
+    <div class="buttons">
+      <button id="senderBtn">Senden</button>
+      <button id="receiverBtn">Empfangen</button>
+      <button id="stopBtn" hidden>Stop</button>
+      <button id="audioBtn">Audio: An</button>
+      <button id="blackoutBtn">Bild: Aus</button>
+      <button id="reconnectBtn" hidden>Erneut verbinden</button>
+      <select id="cameraSelect" hidden></select>
+    </div>
+    <div id="blackoutArea"></div>
   </div>
 
-  <div>
-    <video id="localVideo" autoplay playsinline muted></video>
-    <video id="remoteVideo" autoplay playsinline></video>
-  </div>
+  <div id="statusDisplay">Status: idle</div>
 
-  <pre id="log"></pre>
+  <video id="remoteVideo" autoplay playsinline></video>
+  <video id="localVideo" autoplay muted playsinline></video>
 
-  <script>
-    const wsUrl = `ws://${location.hostname}`;
-    let pc;
-    let localStream;
-    let ws;
-    let roomId, myRole;
+<script>
+  console.log("[DEBUG] Initialisiere robocam App");
 
-    const logEl = document.getElementById('log');
-    function log(msg) {
-      console.log(msg);
-      logEl.textContent += msg + '\n';
-      logEl.scrollTop = logEl.scrollHeight;
-    }
+  const ConnectionState = {
+    IDLE: 'idle',
+    WAITING: 'waiting',
+    READY: 'ready',
+    CONNECTING: 'connecting',
+    CONNECTED: 'connected',
+    ERROR: 'error',
+  };
+  let appState = ConnectionState.IDLE;
+  function setAppState(state) {
+    appState = state;
+    console.log(`[STATE] ${state}`);
+    document.getElementById('statusDisplay').textContent = `Status: ${state}`;
+    document.getElementById('reconnectBtn').hidden = state !== ConnectionState.ERROR;
+  }
 
-    document.getElementById('connectBtn').onclick = async () => {
-      roomId = document.getElementById('roomId').value.trim();
-      myRole = document.getElementById('role').value;
-      if (!roomId) {
-        alert("Bitte Room ID eingeben");
-        return;
-      }
-      connectWebSocket();
+  let pc, localStream, localOfferSent = false, blackOut = false, myRole = null, audioSetting = true, ws;
+  const reconnectInterval = 3000;
+
+  function connectWebSocket() {
+    const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(`${wsProtocol}://${location.host}`);
+
+    ws.onopen = () => {
+      console.log("[DEBUG] WebSocket verbunden");
+      if (myRole) ws.send(JSON.stringify({ type: 'register', role: myRole }));
+      setAppState(ConnectionState.WAITING);
     };
 
-function connectWebSocket() {
-  const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(`${wsProtocol}://${location.hostname}`);
+    ws.onmessage = handleMessage;
+    ws.onerror = e => console.error("[DEBUG] WebSocket Fehler:", e);
+    ws.onclose = () => {
+      console.warn("[DEBUG] WebSocket geschlossen – reconnect ...");
+      setAppState(ConnectionState.ERROR);
+      setTimeout(connectWebSocket, reconnectInterval);
+    };
+  }
+  connectWebSocket();
 
-  ws.onopen = () => {
-    console.log("[DEBUG] WebSocket verbunden");
-    if (myRole) {
-      ws.send(JSON.stringify({
-        type: 'register',
-        role: myRole,
-        roomId: 'id1'  // oder andere Logik für Raum-ID
-      }));
-    }
-    setAppState(ConnectionState.WAITING);
-  };
+  function blackoutScreen() {
+    blackOut = !blackOut;
+    document.getElementById('blackoutArea').style.display = blackOut ? 'block' : 'none';
+    document.getElementById('blackoutBtn').textContent = blackOut ? 'Bild: An' : 'Bild: Aus';
+  }
 
-      ws.onmessage = async (msg) => {
-        const data = JSON.parse(msg.data);
-        log(`[WS] Nachricht erhalten: ${JSON.stringify(data)}`);
+  function toggleAudio() {
+    audioSetting = !audioSetting;
+    document.getElementById('audioBtn').textContent = `Audio: ${audioSetting ? 'An' : 'Aus'}`;
+  }
 
-        if (data.type === "registered") {
-          log(`[WS] Registriert in Raum ${data.roomId} als ${data.role}`);
-          if (role === 'sender') {
-            await startSender();
-          }
-        }
-        if (data.type === "sender_ready" && role === 'receiver') {
-          await startReceiver();
-        }
-        if (data.type === "offer" && role === 'receiver') {
-          log("[PC] Setze Remote Offer");
-          await pc.setRemoteDescription(new RTCSessionDescription(data));
-          log("[PC] Erstelle Answer");
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          log("[PC] Sende Answer");
-          ws.send(JSON.stringify({ type: "answer", sdp: pc.localDescription.sdp, typeDesc: pc.localDescription.type }));
-        }
-        if (data.type === "answer" && role === 'sender') {
-          log("[PC] Setze Remote Answer");
-          await pc.setRemoteDescription(new RTCSessionDescription(data));
-        }
-        if (data.type === "candidate") {
-          log("[PC] Füge ICE Candidate hinzu");
-          try {
-            await pc.addIceCandidate(data.candidate);
-          } catch (err) {
-            log("[PC] Fehler beim Hinzufügen des ICE Candidates: " + err);
-          }
-        }
-      };
+  async function handleMessage(msg) {
+    const text = msg.data instanceof Blob ? await msg.data.text() : msg.data;
+    let data;
+    try { data = JSON.parse(text); } catch { return; }
 
-      ws.onerror = (err) => {
-        log("[WS] Fehler: " + err.message);
-      };
-
-      ws.onclose = () => {
-        log("[WS] Verbindung geschlossen");
-      };
+    if (data.type === 'receiver-ready' && myRole === 'sender') {
+      setAppState(ConnectionState.READY);
+      await startLocalStreamAndOffer();
+      return;
     }
 
-    async function startSender() {
-      log("[PC] Starte Sender");
-      pc = createPeer();
-      try {
-        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        document.getElementById('localVideo').srcObject = localStream;
-        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-        log("[PC] Lokaler Stream gestartet");
-      } catch (err) {
-        log("[PC] getUserMedia Fehler: " + err);
-        alert("Fehler beim Zugriff auf Kamera/Mikrofon.");
-        return;
+    if (data.sdp && pc) {
+      await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+      if (data.sdp.type === 'offer') {
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        ws.send(JSON.stringify({ sdp: pc.localDescription }));
       }
+    } else if (data.candidate && pc) {
+      await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+    }
+  }
+
+  async function start(role) {
+    console.log(`[DEBUG] Starte als ${role}`);
+    myRole = role;
+    if (ws.readyState === WebSocket.OPEN)
+      ws.send(JSON.stringify({ type: 'register', role }));
+
+    document.getElementById('senderBtn').disabled = true;
+    document.getElementById('receiverBtn').disabled = true;
+    document.getElementById('senderBtn').classList.toggle('active', role === 'sender');
+    document.getElementById('receiverBtn').classList.toggle('active', role === 'receiver');
+    document.getElementById('stopBtn').hidden = false;
+    setAppState(ConnectionState.WAITING);
+
+    pc = new RTCPeerConnection();
+    pc.ontrack = e => {
+      document.getElementById('remoteVideo').srcObject = e.streams[0];
+      setAppState(ConnectionState.CONNECTED);
+    };
+    pc.onicecandidate = e => { if (e.candidate) ws.send(JSON.stringify({ candidate: e.candidate })); };
+    pc.oniceconnectionstatechange = () => {
+      console.log("[DEBUG] ICE state:", pc.iceConnectionState);
+      if (['disconnected', 'failed'].includes(pc.iceConnectionState)) {
+        setAppState(ConnectionState.ERROR);
+        attemptReconnectWithDelay(5);
+      }
+      if (['connected'].includes(pc.iceConnectionState)) {
+        setAppState(ConnectionState.CONNECTED);
+      }
+    };
+
+    if (role === 'sender') {
+      await fillCameraSelect();
+      document.getElementById('cameraSelect').hidden = false;
+    }
+  }
+
+  async function fillCameraSelect() {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = devices.filter(d => d.kind === 'videoinput');
+    const select = document.getElementById('cameraSelect');
+    select.innerHTML = '';
+    videoDevices.forEach((device, i) => {
+      const option = document.createElement('option');
+      option.value = device.deviceId;
+      option.text = device.label || `Kamera ${i+1}`;
+      select.appendChild(option);
+    });
+    select.addEventListener('change', startLocalStreamAndOffer);
+    if (videoDevices.length === 1) await startLocalStreamAndOffer();
+  }
+
+  async function startLocalStreamAndOffer() {
+    if (localOfferSent) return;
+    localOfferSent = true;
+    setAppState(ConnectionState.CONNECTING);
+    const cameraId = document.getElementById('cameraSelect').value;
+
+    try {
+      const constraints = {
+        video: { deviceId: { exact: cameraId }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: audioSetting
+      };
+      localStream = await navigator.mediaDevices.getUserMedia(constraints);
+      document.getElementById('localVideo').srcObject = localStream;
+      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      log("[PC] Sende Offer");
-      ws.send(JSON.stringify({ type: "offer", sdp: pc.localDescription.sdp, typeDesc: pc.localDescription.type }));
+      ws.send(JSON.stringify({ sdp: pc.localDescription }));
+      document.getElementById('cameraSelect').hidden = true;
+    } catch (e) {
+      console.error("[DEBUG] Fehler beim Starten:", e);
+      alert("Fehler beim Zugriff auf Kamera/Mikrofon.");
+      setAppState(ConnectionState.ERROR);
     }
+  }
 
-    async function startReceiver() {
-      log("[PC] Starte Receiver");
-      pc = createPeer();
+  function stopAll() {
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+      localStream = null;
     }
-
-    function createPeer() {
-      const config = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
-      const peer = new RTCPeerConnection(config);
-
-      peer.ontrack = (event) => {
-        log("[PC] Remote Track erhalten");
-        document.getElementById('remoteVideo').srcObject = event.streams[0];
-      };
-
-      peer.onicecandidate = (event) => {
-        if (event.candidate) {
-          log("[PC] Sende ICE Candidate");
-          ws.send(JSON.stringify({ type: "candidate", candidate: event.candidate }));
-        }
-      };
-
-      peer.oniceconnectionstatechange = () => {
-        log("[PC] ICE Connection State: " + peer.iceConnectionState);
-      };
-
-      peer.onconnectionstatechange = () => {
-        log("[PC] Connection State: " + peer.connectionState);
-      };
-
-      return peer;
+    if (pc) {
+      pc.close();
+      pc = null;
     }
-  </script>
+    localOfferSent = false;
+    ['senderBtn', 'receiverBtn'].forEach(id => {
+      const el = document.getElementById(id);
+      el.disabled = false;
+      el.classList.remove('active');
+    });
+    document.getElementById('cameraSelect').hidden = true;
+    document.getElementById('stopBtn').hidden = true;
+    document.getElementById('localVideo').srcObject = null;
+    document.getElementById('remoteVideo').srcObject = null;
+    setAppState(ConnectionState.IDLE);
+  }
+
+  function attemptReconnect() {
+    console.log("[DEBUG] Reconnect startet...");
+    start(myRole);
+  }
+
+  function attemptReconnectWithDelay(seconds = 5) {
+    let countdown = seconds;
+    const interval = setInterval(() => {
+      if (countdown <= 0) {
+        clearInterval(interval);
+        attemptReconnect();
+      } else {
+        document.getElementById('statusDisplay').textContent = `Verbindung verloren – neuer Versuch in ${countdown}s`;
+        countdown--;
+      }
+    }, 1000);
+  }
+
+  document.getElementById('senderBtn').addEventListener('click', () => start('sender'));
+  document.getElementById('receiverBtn').addEventListener('click', () => start('receiver'));
+  document.getElementById('stopBtn').addEventListener('click', stopAll);
+  document.getElementById('audioBtn').addEventListener('click', toggleAudio);
+  document.getElementById('blackoutBtn').addEventListener('click', blackoutScreen);
+  document.getElementById('reconnectBtn').addEventListener('click', attemptReconnect);
+</script>
 </body>
 </html>

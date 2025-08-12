@@ -177,7 +177,7 @@
   // WebSocket verbinden
   function connectWebSocket() {
     const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
-    ws = new WebSocket(`${wsProtocol}://${location.host}`);
+    ws = new WebSocket(`${wsProtocol}:`);
 
     ws.onopen = () => {
       console.log("[DEBUG] WebSocket verbunden");

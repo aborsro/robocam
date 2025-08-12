@@ -42,7 +42,7 @@
   <pre id="log"></pre>
 
   <script>
-    const wsUrl = `ws://${location.hostname}:3000`;
+    const wsUrl = `ws://${location.hostname}`;
     let pc;
     let localStream;
     let ws;
@@ -65,15 +65,21 @@
       connectWebSocket();
     };
 
-    function connectWebSocket() {
-      log(`[WS] Verbinde zu ${wsUrl}`);
-      ws = new WebSocket(wsUrl);
+function connectWebSocket() {
+  const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${wsProtocol}://${location.hostname}`);
 
-      ws.onopen = () => {
-        log("[WS] Verbunden");
-        ws.send(JSON.stringify({ type: "register", roomId, role }));
-        log(`[WS] Sende Registrierung: role=${role}, room=${roomId}`);
-      };
+  ws.onopen = () => {
+    console.log("[DEBUG] WebSocket verbunden");
+    if (myRole) {
+      ws.send(JSON.stringify({
+        type: 'register',
+        role: myRole,
+        roomId: 'id1'  // oder andere Logik für Raum-ID
+      }));
+    }
+    setAppState(ConnectionState.WAITING);
+  };
 
       ws.onmessage = async (msg) => {
         const data = JSON.parse(msg.data);

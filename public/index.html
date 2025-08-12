@@ -13,6 +13,10 @@
     background: linear-gradient(to bottom, #f4f4f4, #e0e0e0);
     min-height: 100vh;
   }
+  #statusDisplay {
+    margin-top: 10px;
+    font-weight: bold;
+  }
   .top-bar {
     display: flex;
     align-items: left;
@@ -114,10 +118,6 @@
     margin-left: 10px;
     font-size: 40px;
   }
-  #statusDisplay {
-    margin-top: 10px;
-    font-weight: bold;
-  }
 </style>
 </head>
 <body>
@@ -138,9 +138,9 @@
     </div>
     <div id="blackoutArea"></div>
   </div>
+  <div id="statusDisplay">Status: idle</div>
   <video id="remoteVideo" autoplay playsinline></video>
   <video id="localVideo" autoplay playsinline></video>
-  <div id="statusDisplay">Status: idle</div>
 
 <script>
 
@@ -176,17 +176,6 @@
 	}
   } 
   
-async function testDevices() {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    stream.getTracks().forEach(track => track.stop());
-    console.log("Zugriff funktioniert");
-  } catch (err) {
-    console.error("Kein Zugriff:", err.name);
-  }
-}
-  
-  
   // --- Variables ---
   let pc;
   let localStream;
@@ -213,7 +202,7 @@ async function testDevices() {
     ws.onerror = e => console.error("[DEBUG] WebSocket Fehler:", e);
 
     ws.onclose = () => {
-      console.warn("[DEBUG] WebSocket getrennt – versuche Wiederverbindung...");
+      console.warn("[DEBUG] WebSocket closed – try reconnect ...");
       setAppState(ConnectionState.ERROR);
       setTimeout(connectWebSocket, reconnectInterval);
     };
@@ -291,13 +280,15 @@ async function testDevices() {
       console.log("[DEBUG] ICE state:", pc.iceConnectionState);
       if (['disconnected', 'failed'].includes(pc.iceConnectionState)) {
         setAppState(ConnectionState.ERROR);
-        attemptReconnectWithDelay(1);
+        attemptReconnectWithDelay(5);
+      }
+      if (['connected'].includes(pc.iceConnectionState)) {
+        setAppState(ConnectionState.CONNECTED);
+        attemptReconnectWithDelay(5);
       }
     };
 
     if (role === 'sender') {
-	  testDevices();
-
       const select = document.getElementById('cameraSelect');
       select.style.display = 'block';
       await fillCameraSelect();
@@ -314,7 +305,6 @@ async function testDevices() {
     }
 
     if (role === 'receiver') {
-	  testDevices();
       document.getElementById('remoteVideo').style.display = 'block';
       // document.getElementById('senderBtn').style.display = 'none';
       document.getElementById('blackoutArea').style.display = 'none';
@@ -388,18 +378,18 @@ async function testDevices() {
   }
 
   function attemptReconnect() {
-    console.log("[DEBUG] Reconnect gestartet...");
+    console.log("[DEBUG] Reconnect startet...");
     start(myRole);
   }
 
-  function attemptReconnectWithDelay(seconds = 1) {
+  function attemptReconnectWithDelay(seconds = 5) {
     let countdown = seconds;
     const interval = setInterval(() => {
       if (countdown <= 0) {
         clearInterval(interval);
         attemptReconnect();
       } else {
-        document.getElementById('statusDisplay').textContent = `Verbindung verloren – neuer Versuch in ${countdown}s`;
+        document.getElementById('statusDisplay').textContent = `Connection lost – next attempt in ${countdown}s`;
         countdown--;
       }
     }, 1000);

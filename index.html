@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Robocam with Rooms - Debug Mode</title>
+  <style>
+    body { font-family: sans-serif; background: #111; color: #eee; text-align: center; margin: 0; }
+    video { width: 45%; background: black; margin: 5px; }
+    input, select, button { padding: 5px; margin: 5px; }
+    #log {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      max-height: 150px;
+      background: rgba(0,0,0,0.8);
+      color: #0f0;
+      font-family: monospace;
+      overflow-y: auto;
+      padding: 5px;
+      font-size: 12px;
+      text-align: left;
+      z-index: 10000;
+    }
+  </style>
+</head>
+<body>
+  <h1>Robocam WebRTC (Rooms) - Debug Mode</h1>
+
+  <div>
+    <input id="roomId" placeholder="Room ID" value="id1">
+    <select id="role">
+      <option value="sender">Sender</option>
+      <option value="receiver">Receiver</option>
+    </select>
+    <button id="connectBtn">Connect</button>
+  </div>
+
+  <div>
+    <video id="localVideo" autoplay playsinline muted></video>
+    <video id="remoteVideo" autoplay playsinline></video>
+  </div>
+
+  <pre id="log"></pre>
+
+  <script>
+    const wsUrl = `ws://${location.hostname}:3000`;
+    let pc;
+    let localStream;
+    let ws;
+    let roomId, role;
+
+    const logEl = document.getElementById('log');
+    function log(msg) {
+      console.log(msg);
+      logEl.textContent += msg + '\n';
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    document.getElementById('connectBtn').onclick = async () => {
+      roomId = document.getElementById('roomId').value.trim();
+      role = document.getElementById('role').value;
+      if (!roomId) {
+        alert("Bitte Room ID eingeben");
+        return;
+      }
+      connectWebSocket();
+    };
+
+    function connectWebSocket() {
+      log(`[WS] Verbinde zu ${wsUrl}`);
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        log("[WS] Verbunden");
+        ws.send(JSON.stringify({ type: "register", roomId, role }));
+        log(`[WS] Sende Registrierung: role=${role}, room=${roomId}`);
+      };
+
+      ws.onmessage = async (msg) => {
+        const data = JSON.parse(msg.data);
+        log(`[WS] Nachricht erhalten: ${JSON.stringify(data)}`);
+
+        if (data.type === "registered") {
+          log(`[WS] Registriert in Raum ${data.roomId} als ${data.role}`);
+          if (role === 'sender') {
+            await startSender();
+          }
+        }
+        if (data.type === "sender_ready" && role === 'receiver') {
+          await startReceiver();
+        }
+        if (data.type === "offer" && role === 'receiver') {
+          log("[PC] Setze Remote Offer");
+          await pc.setRemoteDescription(new RTCSessionDescription(data));
+          log("[PC] Erstelle Answer");
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          log("[PC] Sende Answer");
+          ws.send(JSON.stringify({ type: "answer", sdp: pc.localDescription.sdp, typeDesc: pc.localDescription.type }));
+        }
+        if (data.type === "answer" && role === 'sender') {
+          log("[PC] Setze Remote Answer");
+          await pc.setRemoteDescription(new RTCSessionDescription(data));
+        }
+        if (data.type === "candidate") {
+          log("[PC] Füge ICE Candidate hinzu");
+          try {
+            await pc.addIceCandidate(data.candidate);
+          } catch (err) {
+            log("[PC] Fehler beim Hinzufügen des ICE Candidates: " + err);
+          }
+        }
+      };
+
+      ws.onerror = (err) => {
+        log("[WS] Fehler: " + err.message);
+      };
+
+      ws.onclose = () => {
+        log("[WS] Verbindung geschlossen");
+      };
+    }
+
+    async function startSender() {
+      log("[PC] Starte Sender");
+      pc = createPeer();
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        document.getElementById('localVideo').srcObject = localStream;
+        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+        log("[PC] Lokaler Stream gestartet");
+      } catch (err) {
+        log("[PC] getUserMedia Fehler: " + err);
+        alert("Fehler beim Zugriff auf Kamera/Mikrofon.");
+        return;
+      }
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      log("[PC] Sende Offer");
+      ws.send(JSON.stringify({ type: "offer", sdp: pc.localDescription.sdp, typeDesc: pc.localDescription.type }));
+    }
+
+    async function startReceiver() {
+      log("[PC] Starte Receiver");
+      pc = createPeer();
+    }
+
+    function createPeer() {
+      const config = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+      const peer = new RTCPeerConnection(config);
+
+      peer.ontrack = (event) => {
+        log("[PC] Remote Track erhalten");
+        document.getElementById('remoteVideo').srcObject = event.streams[0];
+      };
+
+      peer.onicecandidate = (event) => {
+        if (event.candidate) {
+          log("[PC] Sende ICE Candidate");
+          ws.send(JSON.stringify({ type: "candidate", candidate: event.candidate }));
+        }
+      };
+
+      peer.oniceconnectionstatechange = () => {
+        log("[PC] ICE Connection State: " + peer.iceConnectionState);
+      };
+
+      peer.onconnectionstatechange = () => {
+        log("[PC] Connection State: " + peer.connectionState);
+      };
+
+      return peer;
+    }
+  </script>
+</body>
+</html>

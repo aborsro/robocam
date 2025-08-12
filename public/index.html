@@ -134,6 +134,7 @@
     CONNECTED: 'connected',
     ERROR: 'error',
   };
+  
   let appState = ConnectionState.IDLE;
   function setAppState(state) {
     appState = state;
@@ -169,6 +170,7 @@
     blackOut = !blackOut;
     document.getElementById('blackoutArea').style.display = blackOut ? 'block' : 'none';
     document.getElementById('blackoutBtn').textContent = blackOut ? 'Bild: An' : 'Bild: Aus';
+    document.getElementById('blackoutBtn').style.display = 'block';
   }
 
   function toggleAudio() {

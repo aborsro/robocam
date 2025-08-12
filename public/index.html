@@ -307,7 +307,7 @@ async function testDevices() {
       if (select.options.length === 1) {
         await startLocalStreamAndOffer();
       } else {
-        select.onchange = async () => {
+        select.click = async () => {
           await startLocalStreamAndOffer();
         };
       }

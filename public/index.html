@@ -46,7 +46,7 @@
     let pc;
     let localStream;
     let ws;
-    let roomId, role;
+    let roomId, myRole;
 
     const logEl = document.getElementById('log');
     function log(msg) {
@@ -57,7 +57,7 @@
 
     document.getElementById('connectBtn').onclick = async () => {
       roomId = document.getElementById('roomId').value.trim();
-      role = document.getElementById('role').value;
+      myRole = document.getElementById('role').value;
       if (!roomId) {
         alert("Bitte Room ID eingeben");
         return;

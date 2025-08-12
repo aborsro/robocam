@@ -1,106 +1,78 @@
+const express = require('express');
 const http = require('http');
-const fs = require('fs');
-const path = require('path');
 const WebSocket = require('ws');
 
-const PORT = 3000;
+const app = express();
+const port = process.env.PORT || 3000;
 
-// --- einfache statische Auslieferung ---
-const server = http.createServer((req, res) => {
-  let filePath = '.' + req.url;
-  if (filePath === './') {
-    filePath = './index.html';
-  }
+// Statische Dateien aus /public liefern
+app.use(express.static('public'));
 
-  const extname = String(path.extname(filePath)).toLowerCase();
-  const mimeTypes = {
-    '.html': 'text/html',
-    '.js': 'text/javascript',
-    '.css': 'text/css',
-    '.json': 'application/json',
-    '.png': 'image/png',
-    '.jpg': 'image/jpg',
-    '.gif': 'image/gif',
-    '.wav': 'audio/wav',
-    '.mp4': 'video/mp4',
-    '.woff': 'application/font-woff',
-    '.ttf': 'application/font-ttf',
-    '.eot': 'application/vnd.ms-fontobject',
-    '.otf': 'application/font-otf',
-    '.svg': 'application/image/svg+xml'
-  };
-
-  const contentType = mimeTypes[extname] || 'application/octet-stream';
-
-  fs.readFile(filePath, (error, content) => {
-    if (error) {
-      if (error.code === 'ENOENT') {
-        res.writeHead(404, { 'Content-Type': 'text/html' });
-        res.end('<h1>404 Not Found</h1>', 'utf-8');
-      } else {
-        res.writeHead(500);
-        res.end(`Server Error: ${error.code}`, 'utf-8');
-      }
-    } else {
-      res.writeHead(200, { 'Content-Type': contentType });
-      res.end(content, 'utf-8');
-    }
-  });
-});
-
-// --- WebSocket Signalling ---
+const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-const rooms = {}; // { roomId: { sender: ws, receiver: ws } }
+// Rooms Map: roomId -> Set of clients
+const rooms = new Map();
 
-wss.on('connection', (ws) => {
-  let currentRoom = null;
-  let currentRole = null;
+wss.on('connection', ws => {
+  ws.roomId = null;
+  ws.role = null;
 
-  ws.on('message', (message) => {
+  ws.on('message', message => {
+    let data;
     try {
-      const data = JSON.parse(message);
+      data = JSON.parse(message);
+    } catch {
+      console.warn('Ungültige Nachricht:', message);
+      return;
+    }
 
-      if (data.type === 'register') {
-        const { roomId, role } = data;
-        currentRoom = roomId;
-        currentRole = role;
+    if (data.type === 'register' && data.role && data.roomId) {
+      ws.role = data.role;
+      ws.roomId = data.roomId;
 
-        if (!rooms[roomId]) rooms[roomId] = {};
-        rooms[roomId][role] = ws;
-
-        ws.send(JSON.stringify({ type: 'registered', roomId, role }));
-
-        if (role === 'sender' && rooms[roomId].receiver) {
-          rooms[roomId].receiver.send(JSON.stringify({ type: 'sender_ready' }));
-        }
-        if (role === 'receiver' && rooms[roomId].sender) {
-          ws.send(JSON.stringify({ type: 'sender_ready' }));
-        }
-        return;
+      if (!rooms.has(ws.roomId)) {
+        rooms.set(ws.roomId, new Set());
       }
+      rooms.get(ws.roomId).add(ws);
 
-      // sdp / ice weiterleiten
-      if (currentRoom && rooms[currentRoom]) {
-        const targetRole = currentRole === 'sender' ? 'receiver' : 'sender';
-        const target = rooms[currentRoom][targetRole];
-        if (target && target.readyState === WebSocket.OPEN) {
-          target.send(JSON.stringify(data));
-        }
+      console.log(`Client registered as ${ws.role} in room ${ws.roomId}`);
+
+      // Informiere andere in room über readiness
+      if (ws.role === 'receiver') {
+        rooms.get(ws.roomId).forEach(client => {
+          if (client !== ws && client.role === 'sender') {
+            client.send(JSON.stringify({ type: 'receiver-ready' }));
+          }
+        });
       }
-    } catch (err) {
-      console.error('Error parsing message', err);
+      return;
+    }
+
+    // Signaling Daten (SDP, ICE) weiterleiten an andere in room
+    if (ws.roomId) {
+      const others = rooms.get(ws.roomId);
+      if (!others) return;
+
+      others.forEach(client => {
+        if (client !== ws) {
+          client.send(message);
+        }
+      });
     }
   });
 
   ws.on('close', () => {
-    if (currentRoom && currentRole && rooms[currentRoom]) {
-      rooms[currentRoom][currentRole] = null;
+    if (ws.roomId && rooms.has(ws.roomId)) {
+      rooms.get(ws.roomId).delete(ws);
+      if (rooms.get(ws.roomId).size === 0) {
+        rooms.delete(ws.roomId);
+      }
     }
+    console.log(`Client disconnected from room ${ws.roomId}`);
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-  console.log(`WebSocket signalling active on ws://localhost:${PORT}`);
+server.listen(port, () => {
+  console.log(`Server läuft auf Port ${port}`);
 });

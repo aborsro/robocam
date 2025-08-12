@@ -47,7 +47,7 @@
     max-width: none;
     border: none;
     border-radius: 10px;
-    background-color: #4CAF50;
+    background-color: #808080;
     color: white;
     cursor: pointer;
     transition: background-color 0.3s, transform 0.1s;
@@ -60,11 +60,11 @@
     opacity: 0.8;
   }
   button.active {
-    background-color: #2196F3;
+    background-color: #00FF00;
     transform: scale(1.05);
   }
   #stopBtn {
-    background-color: #f44336;
+    background-color: #FF0000;
   }
   #stopBtn:hover:enabled {
     background-color: #d32f2f;
@@ -73,7 +73,7 @@
     margin-top: 1px;
     border: 2px solid #333;
     border-radius: 5px;
-    background: black;
+    background: #000000;
     object-fit: cover;
   }
   #remoteVideo {
@@ -123,7 +123,7 @@
 <body>
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-    <span>robocam</span>v06
+    <span>robocam</span>v07
   </div>
   <br>
   <div class="top-bar">
@@ -193,7 +193,7 @@ async function testDevices() {
   let localOfferSent = false;
   let blackOut = false;
   let myRole = null;
-  let audioSetting;
+  let audioSetting = true;
   let ws;
   const reconnectInterval = 3000;
 
@@ -261,6 +261,9 @@ async function testDevices() {
     const senderBtn = document.getElementById('senderBtn');
     const receiverBtn = document.getElementById('receiverBtn');
     const stopBtn = document.getElementById('stopBtn');
+
+	document.getElementById('localVideo').srcObject = null;
+    document.getElementById('remoteVideo').srcObject = null;
 
     senderBtn.disabled = true;
     receiverBtn.disabled = true;
@@ -381,7 +384,6 @@ async function testDevices() {
     document.getElementById('stopBtn').style.display = 'none';
     document.getElementById('localVideo').srcObject = null;
     document.getElementById('remoteVideo').srcObject = null;
-    document.getElementById('localVideo').style.display = 'none';
     setAppState(ConnectionState.IDLE);
   }
 

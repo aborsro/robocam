@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Robocam</title>
+<style>
+  video { width: 45%; margin: 5px; border: 1px solid black; }
+  button { margin: 5px; padding: 10px; }
+</style>
+</head>
+<body>
+<h1>Robocam</h1>
+
+<video id="localVideo" autoplay muted></video>
+<video id="remoteVideo" autoplay></video>
+<br>
+<button id="startSenderBtn">Start Sender</button>
+<button id="startReceiverBtn">Start Receiver</button>
+
+<script>
+const ws = new WebSocket(`ws://${location.host}`);
+let localStream = null;
+let pc = null;
+let isSender = false;
+
+ws.onopen = () => console.log('Connected to WS');
+
+ws.onmessage = async (event) => {
+  // Try JSON parse
+  let msg = null;
+  let isJSON = false;
+  if (typeof event.data === 'string') {
+    try {
+      msg = JSON.parse(event.data);
+      isJSON = true;
+    } catch {
+      console.warn('Non-JSON message received, forwarding as-is');
+    }
+  }
+
+  await ensureReceiver(); // make sure RTCPeerConnection exists
+
+  if (isJSON) {
+    if (msg.type === 'offer') {
+      await pc.setRemoteDescription(new RTCSessionDescription(msg));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      ws.send(JSON.stringify(answer));
+    } else if (msg.type === 'answer') {
+      await pc.setRemoteDescription(new RTCSessionDescription(msg));
+    } else if (msg.type === 'ice') {
+      try { await pc.addIceCandidate(msg.candidate); } 
+      catch(e) { console.warn('Error adding ICE candidate', e); }
+    }
+  } else {
+    // forward raw message (Blob or ArrayBuffer) directly to PC
+    if (event.data instanceof Blob || event.data instanceof ArrayBuffer) {
+      const trackEvent = new MessageEvent('message', { data: event.data });
+      pc && pc.dispatchEvent(trackEvent); // send it to the connection if needed
+    }
+  }
+};
+
+
+async function ensureReceiver() {
+  if (!pc) {
+    pc = new RTCPeerConnection();
+    pc.ontrack = (event) => {
+      const remoteVideo = document.getElementById('remoteVideo');
+      remoteVideo.srcObject = event.streams[0];
+    };
+    pc.onicecandidate = (e) => {
+      if (e.candidate) ws.send(JSON.stringify({ type: 'ice', candidate: e.candidate }));
+    };
+  }
+}
+
+async function startSender() {
+  isSender = true;
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+  } catch {
+    alert('Camera/microphone access denied');
+    return;
+  }
+
+  document.getElementById('localVideo').srcObject = localStream;
+
+  pc = new RTCPeerConnection();
+  pc.onicecandidate = (e) => {
+    if (e.candidate) ws.send(JSON.stringify({ type: 'ice', candidate: e.candidate }));
+  };
+  pc.ontrack = (event) => {
+    document.getElementById('remoteVideo').srcObject = event.streams[0];
+  };
+
+  localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  ws.send(JSON.stringify(offer));
+}
+
+async function startReceiver() {
+  isSender = false;
+  await ensureReceiver();
+}
+
+document.getElementById('startSenderBtn').onclick = startSender;
+document.getElementById('startReceiverBtn').onclick = startReceiver;
+</script>
+</body>
+</html>

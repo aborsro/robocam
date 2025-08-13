@@ -13,10 +13,24 @@
     background: linear-gradient(to bottom, #f4f4f4, #e0e0e0);
     min-height: 100vh;
   }
-  header {
+  #statusDisplay {
+    margin-top: 10px;
+    font-weight: bold;
+  }
+  .top-bar {
     display: flex;
-    align-items: center;
+    align-items: left;
+    justify-content: left;
     gap: 10px;
+    flex-wrap: wrap;
+    width: 100%;
+    max-width: 600px;
+    margin-bottom: 10px;
+  }
+  .buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
   }
   .app-icon {
     width: 40px;
@@ -25,28 +39,16 @@
     box-shadow: 0 8px 16px rgba(0,0,0,0.2);
   }
   h1 {
-    margin: 0;
+    margin: 10px;
     font-size: 1.8em;
     color: #333;
   }
-  .top-bar {
-    display: flex;
-    align-items: flex-start;
-    justify-content: flex-start;
-    gap: 10px;
-    flex-wrap: wrap;
-    width: 100%;
-    max-width: 600px;
-    margin: 15px 0;
-  }
-  .buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
   button, select {
-    font-size: 1em;
+    font-size: 1.0em;
     padding: 8px 16px;
+    margin: 0;
+    width: auto;
+    max-width: none;
     border: none;
     border-radius: 10px;
     background-color: #808080;
@@ -62,26 +64,39 @@
     opacity: 0.8;
   }
   button.active {
-    background-color: #00ff00;
+    background-color: #00FF00;
     transform: scale(1.05);
   }
   #stopBtn {
-    background-color: #ff0000;
+    background-color: #FF0000;
   }
   #stopBtn:hover:enabled {
     background-color: #d32f2f;
-  }
-  #blackoutBtn, #audioBtn {
-    background-color: #666;
   }
   video {
     margin-top: 1px;
     border: 2px solid #333;
     border-radius: 5px;
-    background: #000;
+    background: #000000;
     object-fit: cover;
+  }
+  #remoteVideo {
     width: 80%;
     max-width: 80%;
+  }
+  #localVideo {
+    width: 80%;
+    max-width: 80%;
+  }
+  #blackoutBtn {
+    background-color: grey;
+    opacity: 1;
+    z-index: 99999;
+  }
+  #audioBtn {
+    background-color: grey;
+    opacity: 1;
+    z-index: 99999;
   }
   #blackoutArea {
     display: none;
@@ -94,38 +109,44 @@
     opacity: 1;
     z-index: 9999;
   }
-  #statusDisplay {
-    font-weight: bold;
+  .inline-container img {
+    vertical-align: middle;
+    height: 40px;
+  }
+  .inline-container span {
+    vertical-align: middle;
+    margin-left: 10px;
+    font-size: 40px;
   }
 </style>
 </head>
 <body>
-  <header>
+  <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-    <h1>robocam</h1><span>v08</span>
-  </header>
-
+    <span>robocam</span>v10
+  </div>
+  <br>
   <div class="top-bar">
     <div class="buttons">
-      <button id="senderBtn">Senden</button>
-      <button id="receiverBtn">Empfangen</button>
-      <button id="stopBtn" hidden>Stop</button>
-      <button id="audioBtn">Audio: An</button>
-      <button id="blackoutBtn">Bild: Aus</button>
-      <button id="reconnectBtn" hidden>Erneut verbinden</button>
-      <select id="cameraSelect" hidden></select>
+      <button id="senderBtn" onclick="start('sender')">send</button>
+      <button id="receiverBtn" onclick="start('receiver')">receive</button>
+      <button id="stopBtn" onclick="stopAll()" style="display:none;">Stop</button>
+      <button id="audioBtn" onclick="toggleAudio()">Audio On</button>
+      <button id="blackoutBtn" onclick="blackoutScreen()">Off</button>
+      <button id="reconnectBtn" onclick="attemptReconnect()" style="display:none;">Erneut verbinden</button>
+      <select id="cameraSelect" style="display:none;"></select>
     </div>
     <div id="blackoutArea"></div>
   </div>
-
   <div id="statusDisplay">Status: idle</div>
-
   <video id="remoteVideo" autoplay playsinline></video>
-  <video id="localVideo" autoplay muted playsinline></video>
+  <video id="localVideo" autoplay playsinline></video>
 
 <script>
+
   console.log("[DEBUG] Initialisiere robocam App");
 
+  // --- App State ---
   const ConnectionState = {
     IDLE: 'idle',
     WAITING: 'waiting',
@@ -134,48 +155,53 @@
     CONNECTED: 'connected',
     ERROR: 'error',
   };
-  
   let appState = ConnectionState.IDLE;
   function setAppState(state) {
     appState = state;
     console.log(`[STATE] ${state}`);
     document.getElementById('statusDisplay').textContent = `Status: ${state}`;
-    document.getElementById('reconnectBtn').hidden = state !== ConnectionState.ERROR;
+    document.getElementById('reconnectBtn').style.display = state === ConnectionState.ERROR ? 'block' : 'none';
   }
 
-  let pc, localStream, localOfferSent = false, blackOut = false, myRole = null, audioSetting = true, ws;
+  // --- Variablen ---
+  let pc;
+  let localStream;
+  let localOfferSent = false;
+  let blackOut = false;
+  let myRole = null;
+  let audioSetting = true;
+  let ws;
   const reconnectInterval = 3000;
+  const ROOM_ID = 'id1'; // Raum-ID fix, kann auch dynamisch gemacht werden
 
+  // WebSocket verbinden
   function connectWebSocket() {
     const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
-    ws = new WebSocket(`${wsProtocol}://${location.host}`);
+    ws = new WebSocket(`${wsProtocol}://${location.host}/ws`);
 
     ws.onopen = () => {
       console.log("[DEBUG] WebSocket verbunden");
-      if (myRole) ws.send(JSON.stringify({ type: 'register', role: myRole }));
+      if (myRole) ws.send(JSON.stringify({ type: 'register', role: myRole, roomId: ROOM_ID }));
       setAppState(ConnectionState.WAITING);
     };
 
     ws.onmessage = handleMessage;
+
     ws.onerror = e => console.error("[DEBUG] WebSocket Fehler:", e);
+
     ws.onclose = () => {
-      console.warn("[DEBUG] WebSocket geschlossen – reconnect ...");
+      console.warn("[DEBUG] WebSocket closed – try reconnect ...");
       setAppState(ConnectionState.ERROR);
       setTimeout(connectWebSocket, reconnectInterval);
     };
   }
+
   connectWebSocket();
 
   function blackoutScreen() {
     blackOut = !blackOut;
     document.getElementById('blackoutArea').style.display = blackOut ? 'block' : 'none';
-    document.getElementById('blackoutBtn').textContent = blackOut ? 'Bild: An' : 'Bild: Aus';
-    document.getElementById('blackoutBtn').style.display = 'block';
-  }
-
-  function toggleAudio() {
-    audioSetting = !audioSetting;
-    document.getElementById('audioBtn').textContent = `Audio: ${audioSetting ? 'An' : 'Aus'}`;
+    document.getElementById('blackoutBtn').textContent = blackOut ? 'Display' : 'Off';
   }
 
   async function handleMessage(msg) {
@@ -189,14 +215,16 @@
       return;
     }
 
-    if (data.sdp && pc) {
+    if (data.sdp) {
+      if (!pc) return;
       await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
       if (data.sdp.type === 'offer') {
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         ws.send(JSON.stringify({ sdp: pc.localDescription }));
       }
-    } else if (data.candidate && pc) {
+    } else if (data.candidate) {
+      if (!pc) return;
       await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
     }
   }
@@ -204,22 +232,39 @@
   async function start(role) {
     console.log(`[DEBUG] Starte als ${role}`);
     myRole = role;
-    if (ws.readyState === WebSocket.OPEN)
-      ws.send(JSON.stringify({ type: 'register', role }));
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'register', role: myRole, roomId: ROOM_ID }));
+    }
 
-    document.getElementById('senderBtn').disabled = true;
-    document.getElementById('receiverBtn').disabled = true;
-    document.getElementById('senderBtn').classList.toggle('active', role === 'sender');
-    document.getElementById('receiverBtn').classList.toggle('active', role === 'receiver');
-    document.getElementById('stopBtn').hidden = false;
+    const senderBtn = document.getElementById('senderBtn');
+    const receiverBtn = document.getElementById('receiverBtn');
+    const stopBtn = document.getElementById('stopBtn');
+
+    document.getElementById('localVideo').srcObject = null;
+    document.getElementById('remoteVideo').srcObject = null;
+
+    senderBtn.disabled = true;
+    receiverBtn.disabled = true;
+    senderBtn.classList.remove('active');
+    receiverBtn.classList.remove('active');
+    senderBtn.textContent = "send";
+    receiverBtn.textContent = "receive";
+    if (role === 'sender') senderBtn.classList.add('active');
+    if (role === 'receiver') receiverBtn.classList.add('active');
+    stopBtn.style.display = 'block';
     setAppState(ConnectionState.WAITING);
 
     pc = new RTCPeerConnection();
+
     pc.ontrack = e => {
       document.getElementById('remoteVideo').srcObject = e.streams[0];
       setAppState(ConnectionState.CONNECTED);
     };
-    pc.onicecandidate = e => { if (e.candidate) ws.send(JSON.stringify({ candidate: e.candidate })); };
+
+    pc.onicecandidate = e => {
+      if (e.candidate) ws.send(JSON.stringify({ candidate: e.candidate }));
+    };
+
     pc.oniceconnectionstatechange = () => {
       console.log("[DEBUG] ICE state:", pc.iceConnectionState);
       if (['disconnected', 'failed'].includes(pc.iceConnectionState)) {
@@ -228,102 +273,121 @@
       }
       if (['connected'].includes(pc.iceConnectionState)) {
         setAppState(ConnectionState.CONNECTED);
+        attemptReconnectWithDelay(5);
       }
     };
 
     if (role === 'sender') {
+      const select = document.getElementById('cameraSelect');
+      select.style.display = 'block';
       await fillCameraSelect();
-      document.getElementById('cameraSelect').hidden = false;
+
+      if (select.options.length === 1) {
+        await startLocalStreamAndOffer();
+      } else {
+        select.onclick = async () => {
+          await startLocalStreamAndOffer();
+        };
+      }
+    }
+
+    if (role === 'receiver') {
+      document.getElementById('remoteVideo').style.display = 'block';
+      document.getElementById('blackoutArea').style.display = 'none';
     }
   }
 
   async function fillCameraSelect() {
     const devices = await navigator.mediaDevices.enumerateDevices();
-    const videoDevices = devices.filter(d => d.kind === 'videoinput');
+    const videoDevices = devices.filter(device => device.kind === 'videoinput');
     const select = document.getElementById('cameraSelect');
     select.innerHTML = '';
-    videoDevices.forEach((device, i) => {
+    videoDevices.forEach(device => {
       const option = document.createElement('option');
       option.value = device.deviceId;
-      option.text = device.label || `Kamera ${i+1}`;
+      option.text = device.label || `Kamera ${select.length + 1}`;
       select.appendChild(option);
     });
-    select.addEventListener('change', startLocalStreamAndOffer);
-    if (videoDevices.length === 1) await startLocalStreamAndOffer();
   }
 
   async function startLocalStreamAndOffer() {
-    if (localOfferSent) return;
-    localOfferSent = true;
-    setAppState(ConnectionState.CONNECTING);
-    const cameraId = document.getElementById('cameraSelect').value;
-
+    if (localStream) {
+      localStream.getTracks().forEach(t => t.stop());
+      localStream = null;
+    }
+    const select = document.getElementById('cameraSelect');
+    const videoConstraints = select.options.length > 0 ? { deviceId: { exact: select.value } } : true;
     try {
-      const constraints = {
-        video: { deviceId: { exact: cameraId }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      localStream = await navigator.mediaDevices.getUserMedia({
+        video: videoConstraints,
         audio: audioSetting
-      };
-      localStream = await navigator.mediaDevices.getUserMedia(constraints);
-      document.getElementById('localVideo').srcObject = localStream;
-      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+      });
+    } catch (e) {
+      console.error("getUserMedia Fehler", e);
+      alert("Kamera- oder Mikrofonzugriff verweigert oder nicht verfügbar.");
+      return;
+    }
 
+    localStream.getTracks().forEach(track => {
+      if (pc) pc.addTrack(track, localStream);
+    });
+    document.getElementById('localVideo').srcObject = localStream;
+
+    if (!localOfferSent) {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       ws.send(JSON.stringify({ sdp: pc.localDescription }));
-      document.getElementById('cameraSelect').hidden = true;
-    } catch (e) {
-      console.error("[DEBUG] Fehler beim Starten:", e);
-      alert("Fehler beim Zugriff auf Kamera/Mikrofon.");
-      setAppState(ConnectionState.ERROR);
+      localOfferSent = true;
     }
   }
 
-  function stopAll() {
+  function toggleAudio() {
+    audioSetting = !audioSetting;
     if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
-      localStream = null;
+      localStream.getAudioTracks().forEach(t => t.enabled = audioSetting);
     }
+    document.getElementById('audioBtn').textContent = audioSetting ? 'Audio On' : 'Audio Off';
+  }
+
+  function stopAll() {
+    setAppState(ConnectionState.IDLE);
+    localOfferSent = false;
+    myRole = null;
     if (pc) {
       pc.close();
       pc = null;
     }
-    localOfferSent = false;
-    ['senderBtn', 'receiverBtn'].forEach(id => {
-      const el = document.getElementById(id);
-      el.disabled = false;
-      el.classList.remove('active');
-    });
-    document.getElementById('cameraSelect').hidden = true;
-    document.getElementById('stopBtn').hidden = true;
+    if (localStream) {
+      localStream.getTracks().forEach(t => t.stop());
+      localStream = null;
+    }
+    document.getElementById('senderBtn').disabled = false;
+    document.getElementById('receiverBtn').disabled = false;
+    document.getElementById('senderBtn').classList.remove('active');
+    document.getElementById('receiverBtn').classList.remove('active');
+    document.getElementById('stopBtn').style.display = 'none';
+    document.getElementById('cameraSelect').style.display = 'none';
     document.getElementById('localVideo').srcObject = null;
     document.getElementById('remoteVideo').srcObject = null;
-    setAppState(ConnectionState.IDLE);
+    document.getElementById('blackoutArea').style.display = 'none';
+  }
+
+  function attemptReconnectWithDelay(seconds) {
+    setTimeout(() => {
+      if (!pc || pc.iceConnectionState === 'disconnected') {
+        console.log("[DEBUG] Versuche erneut zu verbinden");
+        stopAll();
+        if (myRole) start(myRole);
+      }
+    }, seconds * 1000);
   }
 
   function attemptReconnect() {
-    console.log("[DEBUG] Reconnect startet...");
-    start(myRole);
+    if (appState === ConnectionState.ERROR) {
+      stopAll();
+      if (myRole) start(myRole);
+    }
   }
-
-  function attemptReconnectWithDelay(seconds = 5) {
-    let countdown = seconds;
-    const interval = setInterval(() => {
-      if (countdown <= 0) {
-        clearInterval(interval);
-        attemptReconnect();
-      } else {
-        document.getElementById('statusDisplay').textContent = `Verbindung verloren – neuer Versuch in ${countdown}s`;
-        countdown--;
-      }
-    }, 1000);
-  }
-
-  document.getElementById('senderBtn').addEventListener('click', () => start('sender'));
-  document.getElementById('receiverBtn').addEventListener('click', () => start('receiver'));
-  document.getElementById('stopBtn').addEventListener('click', stopAll);
-  document.getElementById('audioBtn').addEventListener('click', toggleAudio);
-  document.getElementById('blackoutBtn').addEventListener('click', blackoutScreen);
-  document.getElementById('reconnectBtn').addEventListener('click', attemptReconnect);
 </script>
 </body>
 </html>

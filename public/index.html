@@ -134,15 +134,15 @@
       <button id="audioBtn" onclick="toggleAudio()">Audio On</button>
       <button id="blackoutBtn" onclick="blackoutScreen()">Off</button>
       <button id="reconnectBtn" onclick="attemptReconnect()" style="display:none;">Erneut verbinden</button>
-      <button id="hideLocal" onclick="hideLocal()">local</button>
-      <button id="hideRemote" onclick="hideRemote()">remote</button>
+      <button id="hideLocal" onclick="hideLocal()">local Off</button>
+      <button id="hideRemote" onclick="hideRemote()">remote Off</button>
       <select id="cameraSelect" style="display:none;"></select>
     </div>
     <div id="blackoutArea"></div>
   </div>
   <div id="statusDisplay">Status: idle</div>
-  <video id="remoteVideo" autoplay playsinline></video>      <button id="hideRemote" onclick="hideRemote()">remote</button>
-  <video id="localVideo" autoplay playsinline></video>      <button id="hideLocal" onclick="hideLocal()">local</button>
+  <video id="remoteVideo" autoplay playsinline></video>
+  <video id="localVideo" autoplay playsinline></video>
 
 
 
@@ -172,8 +172,8 @@
   let localStream;
   let localOfferSent = false;
   let blackOut = false;
-  let remoteOut = false;
-  let localOut = false;
+  let remoteOut = true;
+  let localOut = true;
   let myRole = null;
   let audioSetting = true;
   let ws;
@@ -207,10 +207,12 @@
   function hideRemote() {
     remoteOut = !remoteOut;
     document.getElementById('remoteVideo').style.display = remoteOut ? 'block' : 'none';
+    document.getElementById('hideRemote').textContent = remoteOut ? 'remote Off' : 'remote On';
   }
   function hideLocal() {
     localOut = !localOut;
     document.getElementById('localVideo').style.display = localOut ? 'block' : 'none';
+    document.getElementById('hideLocal').textContent = localOut ? 'local Off' : 'local On';
   }
 
   function blackoutScreen() {

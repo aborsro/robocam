@@ -93,14 +93,14 @@
 
 <div id="loginForm">
    <h2>Login</h2>
-  <input type="password" id="password" placeholder="Passwort eingeben">
+  <input type="password" id="password" placeholder="Enter Password">
   <button onclick="login()">Login</button>
   <p id="loginMsg"></p>
 </div>
 
 <div id="changeForm" style="display:none;">
   <h3>Passwort ändern (nur Masterpasswort)</h3>
-  <input type="password" id="newPassword" placeholder="Neues Passwort">
+  <input type="password" id="newPassword" placeholder="New Password">
   <button onclick="changePassword()">Ändern</button>
   <p id="changeMsg"></p>
 </div>
@@ -109,7 +109,7 @@
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-    <span>robocam</span>v14
+    <span>robocam</span>v15
   </div>
   <br>
   <div class="top-bar">
@@ -143,7 +143,7 @@ async function login() {
   const data = await res.json();
 
   if (data.success) {
-    // document.getElementById("loginMsg").innerText = "Login erfolgreich!";
+    // document.getElementById("loginMsg").innerText = "Login Success!";
     document.getElementById("loginForm").style.display = "none";
 	if (data.message === "master") {
        document.getElementById("changeForm").style.display = "block";
@@ -151,7 +151,7 @@ async function login() {
        document.getElementById("app").style.display = "block";
 	}
   } else {
-    document.getElementById("loginMsg").innerText = "Falsches Passwort!";
+    document.getElementById("loginMsg").innerText = "Wrong Password!";
   }
 }
 
@@ -168,6 +168,8 @@ async function changePassword() {
   document.getElementById("changeMsg").innerText = data.message;
   document.getElementById("loginForm").style.display = "block";
   document.getElementById("changeForm").style.display = "none";
+  const passwordInput = document.getElementById('password');
+  passwordInput.value = ""; // Clears whatever was typed
 }
 
 // --- robocam Code ---

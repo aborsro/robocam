@@ -90,8 +90,9 @@
 <body>
 
 <!-- Login -->
-<h2>Login</h2>
+
 <div id="loginForm">
+   <h2>Login</h2>
   <input type="password" id="password" placeholder="Passwort eingeben">
   <button onclick="login()">Login</button>
   <p id="loginMsg"></p>
@@ -108,7 +109,7 @@
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-    <span>robocam</span>v13
+    <span>robocam</span>v14
   </div>
   <br>
   <div class="top-bar">
@@ -142,10 +143,13 @@ async function login() {
   const data = await res.json();
 
   if (data.success) {
-    document.getElementById("loginMsg").innerText = "Login erfolgreich!";
+    // document.getElementById("loginMsg").innerText = "Login erfolgreich!";
     document.getElementById("loginForm").style.display = "none";
-    document.getElementById("app").style.display = "block";
-    document.getElementById("changeForm").style.display = "block";
+	if (data.message === "master") {
+       document.getElementById("changeForm").style.display = "block";
+	} else {
+       document.getElementById("app").style.display = "block";
+	}
   } else {
     document.getElementById("loginMsg").innerText = "Falsches Passwort!";
   }
@@ -162,6 +166,8 @@ async function changePassword() {
   });
   const data = await res.json();
   document.getElementById("changeMsg").innerText = data.message;
+  document.getElementById("loginForm").style.display = "block";
+  document.getElementById("changeForm").style.display = "none";
 }
 
 // --- robocam Code ---

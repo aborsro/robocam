@@ -19,11 +19,15 @@ app.use(express.static('public'));
 // --- Login-Route ---
 app.post("/login", (req, res) => {
   const { password } = req.body;
-  if (password === userPassword || password === MASTER) {
-    res.json({ success: true });
+  if (password === userPassword) {
+    res.json({ success: true, message: "user" });
   } else {
-    res.json({ success: false });
-  }
+    if (password === MASTER) {
+       res.json({ success: true, message: "master" });
+     } else {
+       res.json({ success: false });
+     }
+   }
 });
 
 // --- Passwort ändern (nur mit Masterpasswort) ---

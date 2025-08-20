@@ -108,7 +108,7 @@
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-    <span>robocam</span>v12
+    <span>robocam</span>v13
   </div>
   <br>
   <div class="top-bar">
@@ -256,6 +256,9 @@ async function handleMessage(msg) {
 }
 
 async function start(role) {
+  document.getElementById("loginForm").style.display = "none";
+  document.getElementById("changeForm").style.display = "none";
+
   console.log(`[DEBUG] Starte als ${role}`);
   myRole = role;
   if (ws.readyState === WebSocket.OPEN) {

@@ -1,13 +1,43 @@
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
+const bodyParser = require('body-parser');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Serve static files from /public
+// --- Passwortschutz ---
+let userPassword = "1234";         // Startpasswort
+const MASTER = "zork";             // Masterpasswort (nur hier sichtbar!)
+
+// Body Parser für JSON
+app.use(bodyParser.json());
+
+// Statische Dateien ausliefern (z.B. deine index.html in /public)
 app.use(express.static('public'));
 
+// --- Login-Route ---
+app.post("/login", (req, res) => {
+  const { password } = req.body;
+  if (password === userPassword || password === MASTER) {
+    res.json({ success: true });
+  } else {
+    res.json({ success: false });
+  }
+});
+
+// --- Passwort ändern (nur mit Masterpasswort) ---
+app.post("/change-password", (req, res) => {
+  const { master, newPassword } = req.body;
+  if (master === MASTER) {
+    userPassword = newPassword;
+    res.json({ success: true, message: "Passwort geändert!" });
+  } else {
+    res.json({ success: false, message: "Nur mit Masterpasswort erlaubt!" });
+  }
+});
+
+// --- WebSocket Setup ---
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
@@ -32,6 +62,7 @@ wss.on('connection', ws => {
   });
 });
 
+// --- Server starten ---
 server.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
 });

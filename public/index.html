@@ -70,8 +70,8 @@
     background: #000000;
     object-fit: cover;
   }
-  #remoteVideo { width: 80%; max-width: 80%; }
-  #localVideo { width: 80%; max-width: 80%; }
+  #remoteVideo { width: 80%; max-width: 100%; }
+  #localVideo { width: 80%; max-width: 100%; }
   #blackoutBtn { background-color: grey; opacity: 1; z-index: 99999; }
   #audioBtn { background-color: grey; opacity: 1; z-index: 99999; }
   #blackoutArea {
@@ -85,7 +85,25 @@
   }
   .inline-container img { vertical-align: middle; height: 40px; }
   .inline-container span { vertical-align: middle; margin-left: 10px; font-size: 40px; }
-</style>
+
+  .fullscreen-video {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 10000;
+    background: black;
+    object-fit: contain;
+  }
+  #toggleFullscreenBtn {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 10001;
+    background-color: #222;
+    padding: 12px 20px;
+  }  
+  </style>
 </head>
 <body>
 
@@ -123,7 +141,8 @@
       <button id="hideLocal" onclick="hideLocal()">local Off</button>
       <button id="hideRemote" onclick="hideRemote()">remote Off</button>
       <select id="cameraSelect" style="display:none;"></select>
-    </div>
+      <button id="toggleFullscreenBtn" onclick="toggleFullscreen()" style="display:none;">Fullscreen</button>
+	</div>
     <div id="blackoutArea"></div>
   </div>
   <div id="statusDisplay">Status: idle</div>
@@ -385,6 +404,63 @@ function attemptReconnectWithDelay(seconds) {
 function attemptReconnect() {
   if (appState === ConnectionState.ERROR) { stopAll(); if (myRole) start(myRole); }
 }
+
+
+let fullscreenMode = false;
+
+function toggleFullscreen() {
+  const localVideo = document.getElementById('localVideo');
+  const remoteVideo = document.getElementById('remoteVideo');
+  const toggleBtn = document.getElementById('toggleFullscreenBtn');
+  const allButtons = document.querySelector('.buttons');
+  const statusDisplay = document.getElementById('statusDisplay');
+
+  if (!fullscreenMode) {
+    // Umschalten in Vollbild
+    if (myRole === 'sender') {
+      localVideo.classList.add('fullscreen-video');
+      remoteVideo.style.display = 'none';
+    } else if (myRole === 'receiver') {
+      remoteVideo.classList.add('fullscreen-video');
+      localVideo.style.display = 'none';
+    }
+    // Buttons verstecken außer Toggle
+    Array.from(allButtons.children).forEach(btn => {
+      if (btn.id !== 'toggleFullscreenBtn') btn.style.display = 'none';
+    });
+    statusDisplay.style.display = 'none';
+    toggleBtn.textContent = "Zurück";
+    toggleBtn.style.display = 'block';
+    fullscreenMode = true;
+  } else {
+    // Zurückschalten
+    localVideo.classList.remove('fullscreen-video');
+    remoteVideo.classList.remove('fullscreen-video');
+    remoteVideo.style.display = 'block';
+    localVideo.style.display = 'block';
+
+    Array.from(allButtons.children).forEach(btn => {
+      if (btn.id !== 'toggleFullscreenBtn') btn.style.display = '';
+    });
+    statusDisplay.style.display = '';
+    toggleBtn.textContent = "Fullscreen";
+    fullscreenMode = false;
+  }
+}
+
+// Sobald verbunden -> Button sichtbar machen
+function setAppState(state) {
+  appState = state;
+  console.log(`[STATE] ${state}`);
+  document.getElementById('statusDisplay').textContent = `Status: ${state}`;
+  document.getElementById('reconnectBtn').style.display = state === ConnectionState.ERROR ? 'block' : 'none';
+  if (state === ConnectionState.CONNECTED) {
+    document.getElementById('toggleFullscreenBtn').style.display = 'block';
+  } else {
+    document.getElementById('toggleFullscreenBtn').style.display = 'none';
+  }
+}
+
 </script>
 </body>
 </html>

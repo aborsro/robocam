@@ -1,10 +1,16 @@
-@echo off
+@echo on
 
 setlocal
-set targetdir=c:/_Data/04-Vmware/xfer/Projects/GitHub/babyphone-webrtc-app
+set targetdir=c:/_Data/04-Vmware/xfer/Projects/GitHub/robocam
 cd %targetdir%
-if "%ERRORLEVEL%"=="0" goto doit
+if "%ERRORLEVEL%"=="0" goto checkinput
 echo ... ERROR no such directory %targetdir%
+goto skip
+
+:checkinput
+echo ... here is :checkinput
+if [%1] NEQ [] goto doit
+echo ... ERROR enter message for commit
 goto skip
 
 :doit

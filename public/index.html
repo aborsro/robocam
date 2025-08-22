@@ -86,24 +86,28 @@
   .inline-container img { vertical-align: middle; height: 40px; }
   .inline-container span { vertical-align: middle; margin-left: 10px; font-size: 40px; }
 
-  .fullscreen-video {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: 10000;
-    background: black;
-    object-fit: cover; /* füllt den ganzen Bildschirm in Breite UND Höhe */
-  }
- 
-  #toggleFullscreenBtn {
-    position: fixed;
-    top: 10px;
-    right: 10px;
-    z-index: 10001;
-    background-color: #222;
-    padding: 12px 20px;
-  }  
+.fullscreen-video {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 10000;
+  background: black;
+  object-fit: cover;     /* fill width + height, keep ratio */
+  object-position: center; /* crop evenly from center */
+}
+
+/* Fullscreen toggle button in top-left */
+#toggleFullscreenBtn {
+  position: fixed;
+  top: 10px;
+  left: 10px;    /* moved from right to left */
+  z-index: 10001;
+  background-color: #222;
+  padding: 12px 20px;
+  border-radius: 8px;
+}
+
   </style>
 </head>
 <body>
@@ -375,7 +379,7 @@ async function startLocalStreamAndOffer() {
 function toggleAudio() {
   audioSetting = !audioSetting;
   if (localStream) { localStream.getAudioTracks().forEach(t => t.enabled = audioSetting); }
-  document.getElementById('audioBtn').textContent = audioSetting ? 'Audio On' : 'Audio Off';
+  document.getElementById('audioBtn').textContent = audioSetting ? 'Audio Off' : 'Audio On';
 }
 
 function stopAll() {

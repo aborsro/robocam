@@ -97,15 +97,24 @@
   object-position: center; /* crop evenly from center */
 }
 
-/* Fullscreen toggle button in top-left */
+.video-container {
+  position: relative;
+  display: inline-block;
+}
+
+.video-container video {
+  display: block;
+}
+
 #toggleFullscreenBtn {
-  position: fixed;
+  position: absolute;
   top: 10px;
-  left: 10px;    /* moved from right to left */
+  left: 10px;
   z-index: 10001;
-  background-color: #222;
-  padding: 12px 20px;
-  border-radius: 8px;
+  background-color: rgba(0,0,0,0.6);
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 0.9em;
 }
 
   </style>
@@ -132,7 +141,7 @@
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-    <span>robocam</span>v15
+    <span>robocam</span>v16
   </div>
   <br>
   <div class="top-bar">
@@ -143,8 +152,8 @@
       <button id="audioBtn" onclick="toggleAudio()">Audio On</button>
       <button id="blackoutBtn" onclick="blackoutScreen()">Off</button>
       <button id="reconnectBtn" onclick="attemptReconnect()" style="display:none;">Erneut verbinden</button>
-      <button id="hideLocal" onclick="hideLocal()">local Off</button>
-      <button id="hideRemote" onclick="hideRemote()">remote Off</button>
+      <button id="hideLocal" onclick="hideLocal()">Local On</button>
+      <button id="hideRemote" onclick="hideRemote()">Remote On</button>
       <select id="cameraSelect" style="display:none;"></select>
       <button id="toggleFullscreenBtn" onclick="toggleFullscreen()" style="display:none;">Fullscreen</button>
 	</div>
@@ -251,12 +260,12 @@ connectWebSocket();
 function hideRemote() {
   remoteOut = !remoteOut;
   document.getElementById('remoteVideo').style.display = remoteOut ? 'block' : 'none';
-  document.getElementById('hideRemote').textContent = remoteOut ? 'remote Off' : 'remote On';
+  document.getElementById('hideRemote').textContent = remoteOut ? 'Remote On' : 'Remote Off';
 }
 function hideLocal() {
   localOut = !localOut;
   document.getElementById('localVideo').style.display = localOut ? 'block' : 'none';
-  document.getElementById('hideLocal').textContent = localOut ? 'local Off' : 'local On';
+  document.getElementById('hideLocal').textContent = localOut ? 'Local Off' : 'Local On';
 }
 function blackoutScreen() {
   blackOut = !blackOut;

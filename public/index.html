@@ -93,8 +93,9 @@
     height: 100vh;
     z-index: 10000;
     background: black;
-    object-fit: contain;
+    object-fit: cover; /* füllt den ganzen Bildschirm in Breite UND Höhe */
   }
+ 
   #toggleFullscreenBtn {
     position: fixed;
     top: 10px;
@@ -202,6 +203,7 @@ const ConnectionState = {
   CONNECTED: 'connected',
   ERROR: 'error',
 };
+
 let appState = ConnectionState.IDLE;
 function setAppState(state) {
   appState = state;

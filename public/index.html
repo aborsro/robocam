@@ -106,15 +106,27 @@
   display: block;
 }
 
+/* Button im normalen Modus */
 #toggleFullscreenBtn {
+  position: relative; /* normal im Button-Menü */
+  background-color: #222;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 0.9em;
+  color: white;
+}
+
+/* Button im Fullscreen-Video */
+.fullscreen-video-container {
+  position: relative;
+}
+
+.fullscreen-video-container #toggleFullscreenBtn {
   position: absolute;
   top: 10px;
   left: 10px;
   z-index: 10001;
   background-color: rgba(0,0,0,0.6);
-  padding: 8px 14px;
-  border-radius: 6px;
-  font-size: 0.9em;
 }
 
   </style>
@@ -141,7 +153,7 @@
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-    <span>robocam</span>v16
+    <span>robocam</span>v17
   </div>
   <br>
   <div class="top-bar">
@@ -149,11 +161,11 @@
       <button id="senderBtn" onclick="start('sender')">send</button>
       <button id="receiverBtn" onclick="start('receiver')">receive</button>
       <button id="stopBtn" onclick="stopAll()" style="display:none;">Stop</button>
-      <button id="audioBtn" onclick="toggleAudio()">Audio On</button>
+      <button id="audioBtn" onclick="toggleAudio()">Audio Off</button>
       <button id="blackoutBtn" onclick="blackoutScreen()">Off</button>
       <button id="reconnectBtn" onclick="attemptReconnect()" style="display:none;">Erneut verbinden</button>
-      <button id="hideLocal" onclick="hideLocal()">Local On</button>
-      <button id="hideRemote" onclick="hideRemote()">Remote On</button>
+      <button id="hideLocal" onclick="hideLocal()">Local Off</button>
+      <button id="hideRemote" onclick="hideRemote()">Remote Off</button>
       <select id="cameraSelect" style="display:none;"></select>
       <button id="toggleFullscreenBtn" onclick="toggleFullscreen()" style="display:none;">Fullscreen</button>
 	</div>

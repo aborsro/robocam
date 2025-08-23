@@ -114,6 +114,7 @@
   border-radius: 6px;
   font-size: 0.9em;
   color: white;
+  z-index: 10002;
 }
 
 /* Button im Fullscreen-Video */
@@ -125,8 +126,15 @@
   position: absolute;
   top: 10px;
   left: 10px;
-  z-index: 10001;
+  z-index: 10002;
   background-color: rgba(0,0,0,0.6);
+}
+
+.fullscreen-toggle {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10002;
 }
 
   </style>
@@ -134,7 +142,6 @@
 <body>
 
 <!-- Login -->
-
 <div id="loginForm">
    <h2>Login</h2>
   <input type="password" id="password" placeholder="Enter Password">
@@ -153,7 +160,7 @@
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-    <span>robocam</span>v17
+    <span>robocam</span>v18
   </div>
   <br>
   <div class="top-bar">
@@ -161,13 +168,13 @@
       <button id="senderBtn" onclick="start('sender')">send</button>
       <button id="receiverBtn" onclick="start('receiver')">receive</button>
       <button id="stopBtn" onclick="stopAll()" style="display:none;">Stop</button>
-      <button id="audioBtn" onclick="toggleAudio()">Audio Off</button>
-      <button id="blackoutBtn" onclick="blackoutScreen()">Off</button>
+      <button id="audioBtn" onclick="toggleAudio()">Audio On</button>
+      <button id="blackoutBtn" onclick="blackoutScreen()">Blackout</button>
       <button id="reconnectBtn" onclick="attemptReconnect()" style="display:none;">Erneut verbinden</button>
       <button id="hideLocal" onclick="hideLocal()">Local Off</button>
       <button id="hideRemote" onclick="hideRemote()">Remote Off</button>
       <select id="cameraSelect" style="display:none;"></select>
-      <button id="toggleFullscreenBtn" onclick="toggleFullscreen()" style="display:none;">Fullscreen</button>
+      <button id="toggleFullscreenBtn" class="fullscreen-video-container" onclick="toggleFullscreen()" style="display:none;">Fullscreen</button>
 	</div>
     <div id="blackoutArea"></div>
   </div>
@@ -188,7 +195,6 @@ async function login() {
   const data = await res.json();
 
   if (data.success) {
-    // document.getElementById("loginMsg").innerText = "Login Success!";
     document.getElementById("loginForm").style.display = "none";
 	if (data.message === "master") {
        document.getElementById("changeForm").style.display = "block";
@@ -213,8 +219,7 @@ async function changePassword() {
   document.getElementById("changeMsg").innerText = data.message;
   document.getElementById("loginForm").style.display = "block";
   document.getElementById("changeForm").style.display = "none";
-  const passwordInput = document.getElementById('password');
-  passwordInput.value = ""; // Clears whatever was typed
+  document.getElementById('password').value = "";
 }
 
 // --- robocam Code ---
@@ -230,13 +235,6 @@ const ConnectionState = {
 };
 
 let appState = ConnectionState.IDLE;
-function setAppState(state) {
-  appState = state;
-  console.log(`[STATE] ${state}`);
-  document.getElementById('statusDisplay').textContent = `Status: ${state}`;
-  document.getElementById('reconnectBtn').style.display = state === ConnectionState.ERROR ? 'block' : 'none';
-}
-
 let pc;
 let localStream;
 let localOfferSent = false;
@@ -282,7 +280,7 @@ function hideLocal() {
 function blackoutScreen() {
   blackOut = !blackOut;
   document.getElementById('blackoutArea').style.display = blackOut ? 'block' : 'none';
-  document.getElementById('blackoutBtn').textContent = blackOut ? 'Display' : 'Off';
+  document.getElementById('blackoutBtn').textContent = blackOut ? 'Display' : 'Blackout';
 }
 
 async function handleMessage(msg) {
@@ -345,7 +343,7 @@ async function start(role) {
       setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(5);
     }
     if (['connected'].includes(pc.iceConnectionState)) {
-      setAppState(ConnectionState.CONNECTED); attemptReconnectWithDelay(5);
+      setAppState(ConnectionState.CONNECTED); attemptReconnectWithDelay(6);
     }
   };
   if (role === 'sender') {
@@ -355,7 +353,7 @@ async function start(role) {
     if (select.options.length === 1) {
       await startLocalStreamAndOffer();
     } else {
-      select.onclick = async () => { await startLocalStreamAndOffer(); };
+      select.onchange = async () => { await startLocalStreamAndOffer(); };
     }
   }
   if (role === 'receiver') {
@@ -369,12 +367,13 @@ async function fillCameraSelect() {
   const videoDevices = devices.filter(device => device.kind === 'videoinput');
   const select = document.getElementById('cameraSelect');
   select.innerHTML = '';
-  videoDevices.forEach(device => {
+  videoDevices.forEach((device, idx) => {
     const option = document.createElement('option');
     option.value = device.deviceId;
-    option.text = device.label || `Kamera ${select.length + 1}`;
+    option.text = device.label || `Kamera ${idx + 1}`;
     select.appendChild(option);
   });
+  select.onchange = async () => { await startLocalStreamAndOffer(); };
 }
 
 async function startLocalStreamAndOffer() {
@@ -400,13 +399,12 @@ async function startLocalStreamAndOffer() {
 function toggleAudio() {
   audioSetting = !audioSetting;
   if (localStream) { localStream.getAudioTracks().forEach(t => t.enabled = audioSetting); }
-  document.getElementById('audioBtn').textContent = audioSetting ? 'Audio Off' : 'Audio On';
+  document.getElementById('audioBtn').textContent = audioSetting ? 'Audio On' : 'Audio Off';
 }
 
 function stopAll() {
   setAppState(ConnectionState.IDLE);
   localOfferSent = false;
-  myRole = null;
   if (pc) { pc.close(); pc = null; }
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
   document.getElementById('senderBtn').disabled = false;
@@ -423,15 +421,15 @@ function stopAll() {
 function attemptReconnectWithDelay(seconds) {
   setTimeout(() => {
     if (!pc || pc.iceConnectionState === 'disconnected') {
-      console.log("[DEBUG] Versuche erneut zu verbinden");
+      console.log("[DEBUG] Versuche erneut zu verbinden with delay");
       stopAll(); if (myRole) start(myRole);
     }
   }, seconds * 1000);
 }
 function attemptReconnect() {
+  console.log("[DEBUG] Versuche erneut zu verbinden");
   if (appState === ConnectionState.ERROR) { stopAll(); if (myRole) start(myRole); }
 }
-
 
 let fullscreenMode = false;
 
@@ -439,11 +437,10 @@ function toggleFullscreen() {
   const localVideo = document.getElementById('localVideo');
   const remoteVideo = document.getElementById('remoteVideo');
   const toggleBtn = document.getElementById('toggleFullscreenBtn');
-  const allButtons = document.querySelector('.buttons');
+  const otherButtons = document.querySelectorAll('.buttons button:not(#toggleFullscreenBtn)');
   const statusDisplay = document.getElementById('statusDisplay');
 
   if (!fullscreenMode) {
-    // Umschalten in Vollbild
     if (myRole === 'sender') {
       localVideo.classList.add('fullscreen-video');
       remoteVideo.style.display = 'none';
@@ -451,43 +448,37 @@ function toggleFullscreen() {
       remoteVideo.classList.add('fullscreen-video');
       localVideo.style.display = 'none';
     }
-    // Buttons verstecken außer Toggle
-    Array.from(allButtons.children).forEach(btn => {
-      if (btn.id !== 'toggleFullscreenBtn') btn.style.display = 'none';
-    });
+
+    otherButtons.forEach(btn => btn.style.display = 'none');
     statusDisplay.style.display = 'none';
     toggleBtn.textContent = "Zurück";
     toggleBtn.style.display = 'block';
     fullscreenMode = true;
   } else {
-    // Zurückschalten
     localVideo.classList.remove('fullscreen-video');
     remoteVideo.classList.remove('fullscreen-video');
     remoteVideo.style.display = 'block';
     localVideo.style.display = 'block';
 
-    Array.from(allButtons.children).forEach(btn => {
-      if (btn.id !== 'toggleFullscreenBtn') btn.style.display = '';
-    });
+    otherButtons.forEach(btn => btn.style.display = '');
     statusDisplay.style.display = '';
     toggleBtn.textContent = "Fullscreen";
     fullscreenMode = false;
   }
 }
 
-// Sobald verbunden -> Button sichtbar machen
+// *** FIXED: einheitliche, vollständige Version ***
 function setAppState(state) {
   appState = state;
   console.log(`[STATE] ${state}`);
-  document.getElementById('statusDisplay').textContent = `Status: ${state}`;
-  document.getElementById('reconnectBtn').style.display = state === ConnectionState.ERROR ? 'block' : 'none';
-  if (state === ConnectionState.CONNECTED) {
-    document.getElementById('toggleFullscreenBtn').style.display = 'block';
-  } else {
-    document.getElementById('toggleFullscreenBtn').style.display = 'none';
-  }
-}
+  const statusEl = document.getElementById('statusDisplay');
+  const reconnectEl = document.getElementById('reconnectBtn');
+  const toggleFsEl = document.getElementById('toggleFullscreenBtn');
 
+  if (statusEl) statusEl.textContent = `Status: ${state}`;
+  if (reconnectEl) reconnectEl.style.display = (state === ConnectionState.ERROR) ? 'block' : 'none';
+  if (toggleFsEl) toggleFsEl.style.display = (state === ConnectionState.CONNECTED) ? 'block' : 'none';
+}
 </script>
 </body>
 </html>

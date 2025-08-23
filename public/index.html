@@ -288,24 +288,48 @@ async function handleMessage(msg) {
   let data;
   try { data = JSON.parse(text); } catch { return; }
 
+  if (!pc) return; // falls noch keine PeerConnection existiert
+
+  // --- Receiver-ready vom Sender ---
   if (data.type === 'receiver-ready' && myRole === 'sender') {
     setAppState(ConnectionState.READY);
     await startLocalStreamAndOffer();
     return;
   }
+
+  // --- SDP Nachrichten ---
   if (data.sdp) {
-    if (!pc) return;
-    await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-    if (data.sdp.type === 'offer') {
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      ws.send(JSON.stringify({ sdp: pc.localDescription }));
+    console.log("[DEBUG] signalingState vor setRemoteDescription:", pc.signalingState);
+    
+    const remoteDesc = new RTCSessionDescription(data.sdp);
+
+    // --- nur setzen, wenn es passt ---
+    if (
+      pc.signalingState === "stable" && remoteDesc.type === "offer" ||
+      pc.signalingState === "have-local-offer" && remoteDesc.type === "answer"
+    ) {
+      await pc.setRemoteDescription(remoteDesc);
+
+      if (remoteDesc.type === 'offer') {
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        ws.send(JSON.stringify({ sdp: pc.localDescription }));
+      }
+    } else {
+      console.warn("[DEBUG] setRemoteDescription skipped, signalingState:", pc.signalingState, "type:", remoteDesc.type);
     }
-  } else if (data.candidate) {
-    if (!pc) return;
-    await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+  } 
+
+  // --- ICE Kandidaten ---
+  else if (data.candidate) {
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+    } catch (e) {
+      console.warn("[DEBUG] addIceCandidate failed:", e);
+    }
   }
 }
+
 
 async function start(role) {
   document.getElementById("loginForm").style.display = "none";

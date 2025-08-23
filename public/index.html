@@ -366,7 +366,7 @@ async function start(role) {
 }
 
 async function fillCameraSelect() {
-  const devices = await navigator.mediaDevices.enumerateDevicRTCPeerConnectiones();
+  const devices = await navigator.mediaDevices.enumerateDevices();
   const videoDevices = devices.filter(device => device.kind === 'videoinput');
   const select = document.getElementById('cameraSelect');
   select.innerHTML = '';

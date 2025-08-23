@@ -331,7 +331,10 @@ async function start(role) {
   if (role === 'receiver') receiverBtn.classList.add('active');
   stopBtn.style.display = 'block';
   setAppState(ConnectionState.WAITING);
-  pc = new RTCPeerConnection();
+  // Neue RTCPeerConnection mit STUN
+  pc = new RTCPeerConnection({
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+  });
   pc.ontrack = e => {
     document.getElementById('remoteVideo').srcObject = e.streams[0];
     setAppState(ConnectionState.CONNECTED);
@@ -363,7 +366,7 @@ async function start(role) {
 }
 
 async function fillCameraSelect() {
-  const devices = await navigator.mediaDevices.enumerateDevices();
+  const devices = await navigator.mediaDevices.enumerateDevicRTCPeerConnectiones();
   const videoDevices = devices.filter(device => device.kind === 'videoinput');
   const select = document.getElementById('cameraSelect');
   select.innerHTML = '';

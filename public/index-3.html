@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>robocam</title>
 <style>
@@ -24,8 +24,8 @@
   #blackoutArea { display: none; position: fixed; top:0; left:0; width:100vw; height:100vh; background-color:black; opacity:1; z-index:9999; }
   .inline-container img { vertical-align: middle; height:40px; }
   .inline-container span { vertical-align: middle; margin-left:10px; font-size:40px; }
-  .fullscreen-video { position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:10000; background:black; object-fit:cover; object-position:center; }
-  .fullscreen-toggle { position:absolute; top:10px; right:10px; z-index:10001; background-color:rgba(0,0,0,0.6); padding:8px 14px; border-radius:6px; font-size:0.9em; color:white; }
+  .fullscreen-video { position: fixed; top:0; left:0; width:100vw; height:100vh; z-index:10000; background:black; object-fit: cover; object-position: center; }
+  .fullscreen-toggle { position: absolute; top: 10px; right: 10px; z-index: 10001; background-color: rgba(0,0,0,0.6); padding: 8px 14px; border-radius: 6px; font-size: 0.9em; color: white; }
 </style>
 </head>
 <body>
@@ -45,6 +45,11 @@
 </div>
 
 <div id="app">
+  <div class="inline-container">
+    <img src="favicon.ico" alt="App Icon" class="app-icon">
+    <span>robocam</span>v18
+  </div>
+  <br>
   <div class="top-bar">
     <div class="buttons">
       <button id="senderBtn" onclick="start('sender')">send</button>
@@ -52,7 +57,7 @@
       <button id="stopBtn" onclick="stopAll()" style="display:none;">Stop</button>
       <button id="audioBtn" onclick="toggleAudio()">Audio Off</button>
       <button id="blackoutBtn" onclick="blackoutScreen()">Off</button>
-      <button id="reconnectBtn" onclick="attemptReconnect()" style="display:none;">Reconnect</button>
+      <button id="reconnectBtn" onclick="attemptReconnect()" style="display:none;">Erneut verbinden</button>
       <button id="hideLocal" onclick="hideLocal()">Local Off</button>
       <button id="hideRemote" onclick="hideRemote()">Remote Off</button>
       <select id="cameraSelect" style="display:none;"></select>
@@ -69,28 +74,7 @@
 const ConnectionState = { IDLE:'idle', WAITING:'waiting', READY:'ready', CONNECTED:'connected', ERROR:'error' };
 let appState = ConnectionState.IDLE;
 let pc, localStream, localOfferSent=false, blackOut=false, remoteOut=true, localOut=true, myRole=null, audioSetting=true, ws;
-let iceServers = []; // Dynamische ICE Server
-
-// --- Xirsys ICE Server abrufen ---
-async function fetchXirsysIceServers(){
-  const xhr = new XMLHttpRequest();
-  return new Promise((resolve,reject)=>{
-    xhr.onreadystatechange = function(){
-      if(xhr.readyState===4){
-        if(xhr.status===200){
-          const res = JSON.parse(xhr.responseText);
-          iceServers = res.v.iceServers;
-          console.log("[ICE SERVERS]", iceServers);
-          resolve();
-        } else reject(xhr.responseText);
-      }
-    };
-    xhr.open("PUT","https://global.xirsys.net/_turn/robocam",true);
-    xhr.setRequestHeader("Authorization","Basic "+btoa("aborsro:e2d37f0c-800f-11f0-98d4-0242ac150002")); // Dein Xirsys Secret
-    xhr.setRequestHeader("Content-Type","application/json");
-    xhr.send(JSON.stringify({format:"urls"}));
-  });
-}
+const ROOM_ID='id1';
 
 // --- App State ---
 function setAppState(state){
@@ -107,10 +91,14 @@ async function login(){
   const data=await res.json();
   if(data.success){
     document.getElementById("loginForm").style.display="none";
-    if(data.message==="master") document.getElementById("changeForm").style.display="block";
-    else document.getElementById("app").style.display="block";
-  } else document.getElementById("loginMsg").innerText="Wrong Password!";
+    if(data.message==="master"){
+      document.getElementById("changeForm").style.display="block";
+    } else {
+      document.getElementById("app").style.display="block";
+    }
+  } else { document.getElementById("loginMsg").innerText="Wrong Password!"; }
 }
+
 async function changePassword(){
   const newPw=document.getElementById("newPassword").value;
   const master=document.getElementById("password").value;
@@ -126,28 +114,38 @@ async function changePassword(){
 function connectWebSocket(){
   const wsProtocol = location.protocol==='https:'?'wss':'ws';
   ws = new WebSocket(`${wsProtocol}://${location.host}/ws`);
-  ws.onopen=()=>{ if(myRole) ws.send(JSON.stringify({type:'register',role:myRole,roomId:'id1'})); setAppState(ConnectionState.WAITING); };
+  ws.onopen=()=>{ if(myRole) ws.send(JSON.stringify({type:'register',role:myRole,roomId:ROOM_ID})); setAppState(ConnectionState.WAITING); };
   ws.onmessage=handleMessage;
   ws.onerror=e=>console.error(e);
   ws.onclose=()=>{ setAppState(ConnectionState.ERROR); setTimeout(connectWebSocket,3000); };
 }
 connectWebSocket();
 
-// --- Camera ---
 async function fillCameraSelect(){
   const devices = await navigator.mediaDevices.enumerateDevices();
-  const videoDevices = devices.filter(d=>d.kind==='videoinput');
+  const videoDevices = devices.filter(d => d.kind === 'videoinput');
   const select = document.getElementById('cameraSelect');
-  select.innerHTML='';
-  videoDevices.forEach((device,idx)=>{
-    const option=document.createElement('option');
-    option.value=device.deviceId;
-    option.text=device.label||`Kamera ${idx+1}`;
+  select.innerHTML = '';
+
+  videoDevices.forEach((device, idx) => {
+    const option = document.createElement('option');
+    option.value = device.deviceId;
+    option.text = device.label || `Kamera ${idx+1}`;
     select.appendChild(option);
   });
-  if(videoDevices.length===1){ select.value=videoDevices[0].deviceId; await startLocalStreamAndOffer(); }
-  select.onchange=async()=>{ await startLocalStreamAndOffer(); };
+
+  // Wenn nur eine Kamera vorhanden ist, automatisch auswählen und starten
+  if(videoDevices.length === 1){
+    select.value = videoDevices[0].deviceId;
+    await startLocalStreamAndOffer();
+  }
+
+  // onchange Event für Dropdown
+  select.onchange = async () => {
+    await startLocalStreamAndOffer();
+  };
 }
+
 
 // --- Handle Messages ---
 async function handleMessage(msg){
@@ -156,18 +154,27 @@ async function handleMessage(msg){
   try{ data=JSON.parse(text); }catch{return;}
   if(!pc) return;
 
-  if(data.type==='receiver-ready' && myRole==='sender'){ setAppState(ConnectionState.READY); await startLocalStreamAndOffer(); return; }
+  if(data.type==='receiver-ready' && myRole==='sender'){
+    setAppState(ConnectionState.READY);
+    await startLocalStreamAndOffer();
+    return;
+  }
 
   if(data.sdp){
     const remoteDesc = new RTCSessionDescription(data.sdp);
-    if((pc.signalingState==='stable' && remoteDesc.type==='offer') || (pc.signalingState==='have-local-offer' && remoteDesc.type==='answer')){
+    if(
+      (pc.signalingState==='stable' && remoteDesc.type==='offer') ||
+      (pc.signalingState==='have-local-offer' && remoteDesc.type==='answer')
+    ){
       await pc.setRemoteDescription(remoteDesc);
       if(remoteDesc.type==='offer'){
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         ws.send(JSON.stringify({sdp:pc.localDescription}));
       }
-    } else console.warn("[DEBUG] setRemoteDescription skipped", pc.signalingState, remoteDesc.type);
+    } else {
+      console.warn("[DEBUG] setRemoteDescription skipped", pc.signalingState, remoteDesc.type);
+    }
   } else if(data.candidate){
     try{ await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); }
     catch(e){ console.warn("addIceCandidate failed:", e); }
@@ -177,36 +184,46 @@ async function handleMessage(msg){
 // --- Start Sender/Receiver ---
 async function start(role){
   myRole=role;
-  await fetchXirsysIceServers(); // Dynamisch ICE Server holen
-  if(ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'register',role:myRole,roomId:'id1'}));
+  if(ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify({type:'register',role:myRole,roomId:ROOM_ID}));
   document.getElementById('senderBtn').disabled=true;
   document.getElementById('receiverBtn').disabled=true;
   document.getElementById('stopBtn').style.display='block';
   setAppState(ConnectionState.WAITING);
 
-  pc = new RTCPeerConnection({ iceServers });
+  pc = new RTCPeerConnection({
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "turn:TURN_SERVER:3478", username:"USERNAME", credential:"PASSWORD" } // <-- Trage hier TURN-Daten ein
+    ]
+  });
 
-  pc.ontrack=e=>document.getElementById('remoteVideo').srcObject=e.streams[0];
+  pc.ontrack = e=>document.getElementById('remoteVideo').srcObject=e.streams[0];
   pc.onicecandidate=e=>{ if(e.candidate) ws.send(JSON.stringify({candidate:e.candidate})); };
-  pc.oniceconnectionstatechange=()=>{ 
+  pc.oniceconnectionstatechange=()=>{
     console.log("[ICE State]", pc.iceConnectionState);
     if(['disconnected','failed'].includes(pc.iceConnectionState)){ setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(5); }
     if(pc.iceConnectionState==='connected'){ setAppState(ConnectionState.CONNECTED); }
   };
 
-  if(role==='sender'){ document.getElementById('cameraSelect').style.display='block'; await fillCameraSelect(); await startLocalStreamAndOffer(); }
-  if(role==='receiver'){ document.getElementById('remoteVideo').style.display='block'; }
+  if(role==='sender'){
+    document.getElementById('cameraSelect').style.display='block';
+    await fillCameraSelect();
+    await startLocalStreamAndOffer();
+  }
+  if(role==='receiver'){
+    document.getElementById('remoteVideo').style.display='block';
+  }
 }
 
 // --- Local Stream ---
 async function startLocalStreamAndOffer(){
   if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null; }
-  const select=document.getElementById('cameraSelect');
-  const videoConstraints=select.options.length>0?{ deviceId:{ exact: select.value } } : true;
+  const select = document.getElementById('cameraSelect');
+  const videoConstraints = select.options.length>0 ? { deviceId: { exact: select.value } } : true;
   localStream = await navigator.mediaDevices.getUserMedia({video:videoConstraints,audio:audioSetting});
   localStream.getTracks().forEach(track=>pc.addTrack(track,localStream));
   document.getElementById('localVideo').srcObject=localStream;
-  if(!localOfferSent){ 
+  if(!localOfferSent){
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     ws.send(JSON.stringify({sdp:pc.localDescription}));
@@ -219,7 +236,18 @@ function hideRemote(){ remoteOut=!remoteOut; document.getElementById('remoteVide
 function hideLocal(){ localOut=!localOut; document.getElementById('localVideo').style.display=localOut?'block':'none'; document.getElementById('hideLocal').textContent=localOut?'Local Off':'Local On'; }
 function blackoutScreen(){ blackOut=!blackOut; document.getElementById('blackoutArea').style.display=blackOut?'block':'none'; document.getElementById('blackoutBtn').textContent=blackOut?'Display':'Off'; }
 function toggleAudio(){ audioSetting=!audioSetting; if(localStream)localStream.getAudioTracks().forEach(t=>t.enabled=audioSetting); document.getElementById('audioBtn').textContent=audioSetting?'Audio Off':'Audio On'; }
-function stopAll(){ setAppState(ConnectionState.IDLE); localOfferSent=false; myRole=null; if(pc){ pc.close(); pc=null; } if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null; } document.getElementById('senderBtn').disabled=false; document.getElementById('receiverBtn').disabled=false; document.getElementById('stopBtn').style.display='none'; document.getElementById('cameraSelect').style.display='none'; document.getElementById('localVideo').srcObject=null; document.getElementById('remoteVideo').srcObject=null; document.getElementById('blackoutArea').style.display='none'; }
+function stopAll(){
+  setAppState(ConnectionState.IDLE); localOfferSent=false; myRole=null;
+  if(pc){ pc.close(); pc=null; }
+  if(localStream){ localStream.getTracks().forEach(t=>t.stop()); localStream=null; }
+  document.getElementById('senderBtn').disabled=false;
+  document.getElementById('receiverBtn').disabled=false;
+  document.getElementById('stopBtn').style.display='none';
+  document.getElementById('cameraSelect').style.display='none';
+  document.getElementById('localVideo').srcObject=null;
+  document.getElementById('remoteVideo').srcObject=null;
+  document.getElementById('blackoutArea').style.display='none';
+}
 function attemptReconnectWithDelay(seconds){ setTimeout(()=>{ if(!pc || pc.iceConnectionState==='disconnected'){ stopAll(); if(myRole) start(myRole); } },seconds*1000); }
 function attemptReconnect(){ if(appState===ConnectionState.ERROR){ stopAll(); if(myRole) start(myRole); } }
 

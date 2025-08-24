@@ -354,7 +354,7 @@ async function fillCameraSelect() {
   const videoDevices = devices.filter(device => device.kind === 'videoinput');
   const select = document.getElementById('cameraSelect');
   select.innerHTML = '';
-  
+
   videoDevices.forEach((device, index) => {
     const option = document.createElement('option');
     option.value = device.deviceId;
@@ -365,11 +365,12 @@ async function fillCameraSelect() {
   if (videoDevices.length > 0) {
     select.value = videoDevices[0].deviceId; // Standardkamera
     select.style.display = 'block';
-    // Event bei Änderung der Kamera
-    select.addEventListener('change', async () => {
-      await startLocalStreamAndOffer();
-    });
   }
+
+  // Event: Kamera wechseln
+  select.addEventListener('change', async () => {
+    await startLocalStreamAndOffer(); // Stoppt alten Stream, startet neuen
+  });
 }
 
 async function startLocalStreamAndOffer() {

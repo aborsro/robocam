@@ -19,15 +19,50 @@
   button.active { background-color: #00FF00; transform: scale(1.05); }
   #stopBtn { background-color: #FF0000; }
   #stopBtn:hover:enabled { background-color: #d32f2f; }
-  video { margin-top: 1px; border: 2px solid #333; border-radius: 5px; background: #000000; object-fit: cover; }
   #remoteVideo { width: 80%; max-width: 100%; }
   #localVideo { width: 80%; max-width: 100%; }
   #blackoutBtn { background-color: grey; opacity: 1; z-index: 99999; }
   #audioBtn { background-color: grey; opacity: 1; z-index: 99999; }
   #blackoutArea { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: black; opacity: 1; z-index: 9999; }
+      #controls {
+      margin-bottom: 15px;
+    }
+
+    #toggleSizeBtn {
+      padding: 10px 20px;
+      background: #0077cc;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    #toggleSizeBtn:hover {
+      background: #005fa3;
+    }
+
+    video {
+      display: block;
+      margin: 15px auto;
+      max-width: 400px; /* normale Größe */
+      width: 100%;
+      height: auto;
+      transition: all 0.3s ease;
+      background: black;
+      border: 2px solid #ccc;
+      border-radius: 8px;
+    }
+
+    .fullwidth {
+      max-width: 100% !important;
+      width: 100% !important;
+      height: auto !important;
+    }
   .inline-container img { vertical-align: middle; height: 40px; }
   .inline-container span { vertical-align: middle; margin-left: 10px; font-size: 40px; }
-</style>
+
+  </style>
 </head>
 <body>
 
@@ -50,7 +85,7 @@
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-    <span>robocam</span>v15
+    <span>robocam</span>v17
   </div>
   <br>
   <div class="top-bar">
@@ -66,6 +101,10 @@
       <select id="cameraSelect" style="display:none;"></select>
     </div>
     <div id="blackoutArea"></div>
+	<div id="controls">
+       <button id="toggleSizeBtn">📺 Video auf ganze Breite</button>
+  </div>
+
   </div>
   <div id="statusDisplay">Status: idle</div>
   <video id="remoteVideo" autoplay playsinline></video>
@@ -73,6 +112,28 @@
 </div>
 
 <script>
+    const localVideo = document.getElementById("localVideo");
+    const remoteVideo = document.getElementById("remoteVideo");
+    const toggleBtn = document.getElementById("toggleSizeBtn");
+    let pc;
+    let ws;
+    let role; // "sender" oder "receiver"
+    let full = false;
+
+    // Button-Handler für volle Breite
+    toggleBtn.onclick = () => {
+      full = !full;
+      if (full) {
+        localVideo.classList.add("fullwidth");
+        remoteVideo.classList.add("fullwidth");
+        toggleBtn.textContent = "🔙 Video zurücksetzen";
+      } else {
+        localVideo.classList.remove("fullwidth");
+        remoteVideo.classList.remove("fullwidth");
+        toggleBtn.textContent = "📺 Video auf ganze Breite";
+      }
+    };
+	
 // --- Login / Passwort-Logik ---
 async function login() {
   const pw = document.getElementById("password").value;
@@ -126,7 +187,6 @@ function setAppState(state) {
   document.getElementById('reconnectBtn').style.display = state === ConnectionState.ERROR ? 'block' : 'none';
 }
 
-let pc;
 let localStream;
 let localOfferSent = false;
 let blackOut = false;
@@ -134,7 +194,7 @@ let remoteOut = true;
 let localOut = true;
 let myRole = null;
 let audioSetting = true;
-let ws;
+
 const reconnectInterval = 3000;
 const ROOM_ID = 'id1';
 
@@ -252,8 +312,13 @@ async function start(role) {
     console.error("ICE Server fetch fehlgeschlagen:", e);
     return [];
   });
-  pc = new RTCPeerConnection({ iceServers });
-
+  
+  pc = new RTCPeerConnection({
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" }
+    ]
+  });
+  
   pc.ontrack = e => {
     document.getElementById('remoteVideo').srcObject = e.streams[0];
     setAppState(ConnectionState.CONNECTED);

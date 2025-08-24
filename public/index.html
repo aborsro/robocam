@@ -354,33 +354,55 @@ async function fillCameraSelect() {
   const videoDevices = devices.filter(device => device.kind === 'videoinput');
   const select = document.getElementById('cameraSelect');
   select.innerHTML = '';
-  videoDevices.forEach(device => {
+  
+  videoDevices.forEach((device, index) => {
     const option = document.createElement('option');
     option.value = device.deviceId;
-    option.text = device.label || `Kamera ${select.length + 1}`;
+    option.text = device.label || `Kamera ${index + 1}`;
     select.appendChild(option);
   });
+
+  if (videoDevices.length > 0) {
+    select.value = videoDevices[0].deviceId; // Standardkamera
+    select.style.display = 'block';
+    // Event bei Änderung der Kamera
+    select.addEventListener('change', async () => {
+      await startLocalStreamAndOffer();
+    });
+  }
 }
 
 async function startLocalStreamAndOffer() {
-  if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+  if (localStream) { 
+    localStream.getTracks().forEach(track => track.stop()); 
+    localStream = null; 
+  }
+
   const select = document.getElementById('cameraSelect');
-  const videoConstraints = select.options.length > 0 ? { deviceId: { exact: select.value } } : true;
+  const videoConstraints = select.value ? { deviceId: { exact: select.value } } : true;
+
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: audioSetting });
+    localStream = await navigator.mediaDevices.getUserMedia({ 
+      video: videoConstraints, 
+      audio: audioSetting 
+    });
   } catch (e) {
     console.error("getUserMedia Fehler", e);
-    alert("Kamera- oder Mikrofonzugriff verweigert oder nicht verfügbar."); return;
+    alert("Kamera- oder Mikrofonzugriff verweigert oder nicht verfügbar.");
+    return;
   }
+
   localStream.getTracks().forEach(track => { if (pc) pc.addTrack(track, localStream); });
-  document.getElementById('localVideo').srcObject = localStream;
-  if (!localOfferSent) {
+  localVideo.srcObject = localStream;
+
+  if (!localOfferSent && pc) {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     ws.send(JSON.stringify({ sdp: pc.localDescription }));
     localOfferSent = true;
   }
 }
+
 
 function toggleAudio() {
   audioSetting = !audioSetting;

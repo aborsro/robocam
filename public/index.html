@@ -5,84 +5,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>robocam</title>
 <style>
-  body {
-    font-family: sans-serif;
-    display: flex;
-    flex-direction: column;
-    padding: 20px;
-    background: linear-gradient(to bottom, #f4f4f4, #e0e0e0);
-    min-height: 100vh;
-  }
+  body { font-family: sans-serif; display: flex; flex-direction: column; padding: 20px; background: linear-gradient(to bottom, #f4f4f4, #e0e0e0); min-height: 100vh; }
   #loginForm, #changeForm { margin-bottom: 20px; }
   #app { display: none; }
-  #statusDisplay {
-    margin-top: 10px;
-    font-weight: bold;
-  }
-  .top-bar {
-    display: flex;
-    align-items: left;
-    justify-content: left;
-    gap: 10px;
-    flex-wrap: wrap;
-    width: 100%;
-    max-width: 600px;
-    margin-bottom: 10px;
-  }
-  .buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .app-icon {
-    width: 40px;
-    height: 40px;
-    border-radius: 12px;
-    box-shadow: 0 8px 16px rgba(0,0,0,0.2);
-  }
-  h1 {
-    margin: 10px;
-    font-size: 1.8em;
-    color: #333;
-  }
-  button, select {
-    font-size: 1.0em;
-    padding: 8px 16px;
-    margin: 0;
-    width: auto;
-    max-width: none;
-    border: none;
-    border-radius: 10px;
-    background-color: #808080;
-    color: white;
-    cursor: pointer;
-    transition: background-color 0.3s, transform 0.1s;
-  }
+  #statusDisplay { margin-top: 10px; font-weight: bold; }
+  .top-bar { display: flex; align-items: left; justify-content: left; gap: 10px; flex-wrap: wrap; width: 100%; max-width: 600px; margin-bottom: 10px; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+  .app-icon { width: 40px; height: 40px; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.2); }
+  h1 { margin: 10px; font-size: 1.8em; color: #333; }
+  button, select { font-size: 1.0em; padding: 8px 16px; margin: 0; width: auto; max-width: none; border: none; border-radius: 10px; background-color: #808080; color: white; cursor: pointer; transition: background-color 0.3s, transform 0.1s; }
   button:hover:enabled { background-color: #45a049; }
   button:disabled { cursor: not-allowed; opacity: 0.8; }
   button.active { background-color: #00FF00; transform: scale(1.05); }
   #stopBtn { background-color: #FF0000; }
   #stopBtn:hover:enabled { background-color: #d32f2f; }
-  video {
-    margin-top: 1px;
-    border: 2px solid #333;
-    border-radius: 5px;
-    background: #000000;
-    object-fit: cover;
-  }
+  video { margin-top: 1px; border: 2px solid #333; border-radius: 5px; background: #000000; object-fit: cover; }
   #remoteVideo { width: 80%; max-width: 100%; }
   #localVideo { width: 80%; max-width: 100%; }
   #blackoutBtn { background-color: grey; opacity: 1; z-index: 99999; }
   #audioBtn { background-color: grey; opacity: 1; z-index: 99999; }
-  #blackoutArea {
-    display: none;
-    position: fixed;
-    top: 0; left: 0;
-    width: 100vw; height: 100vh;
-    background-color: black;
-    opacity: 1;
-    z-index: 9999;
-  }
+  #blackoutArea { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: black; opacity: 1; z-index: 9999; }
   .inline-container img { vertical-align: middle; height: 40px; }
   .inline-container span { vertical-align: middle; margin-left: 10px; font-size: 40px; }
 </style>
@@ -90,7 +32,6 @@
 <body>
 
 <!-- Login -->
-
 <div id="loginForm">
    <h2>Login</h2>
   <input type="password" id="password" placeholder="Enter Password">
@@ -143,13 +84,12 @@ async function login() {
   const data = await res.json();
 
   if (data.success) {
-    // document.getElementById("loginMsg").innerText = "Login Success!";
     document.getElementById("loginForm").style.display = "none";
-	if (data.message === "master") {
+    if (data.message === "master") {
        document.getElementById("changeForm").style.display = "block";
-	} else {
+    } else {
        document.getElementById("app").style.display = "block";
-	}
+    }
   } else {
     document.getElementById("loginMsg").innerText = "Wrong Password!";
   }
@@ -168,20 +108,15 @@ async function changePassword() {
   document.getElementById("changeMsg").innerText = data.message;
   document.getElementById("loginForm").style.display = "block";
   document.getElementById("changeForm").style.display = "none";
-  const passwordInput = document.getElementById('password');
-  passwordInput.value = ""; // Clears whatever was typed
+  document.getElementById('password').value = "";
 }
 
 // --- robocam Code ---
 console.log("[DEBUG] Initialisiere robocam App");
 
 const ConnectionState = {
-  IDLE: 'idle',
-  WAITING: 'waiting',
-  READY: 'ready',
-  CONNECTING: 'connecting',
-  CONNECTED: 'connected',
-  ERROR: 'error',
+  IDLE: 'idle', WAITING: 'waiting', READY: 'ready',
+  CONNECTING: 'connecting', CONNECTED: 'connected', ERROR: 'error',
 };
 let appState = ConnectionState.IDLE;
 function setAppState(state) {
@@ -222,6 +157,30 @@ function connectWebSocket() {
   };
 }
 connectWebSocket();
+
+// --- ICE Server von Xirsys laden ---
+async function fetchIceServers() {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.onreadystatechange = () => {
+      if (xhr.readyState === 4) {
+        if (xhr.status === 200) {
+          try {
+            const res = JSON.parse(xhr.responseText);
+            console.log("Xirsys ICE Servers:", res.v.iceServers);
+            resolve(res.v.iceServers);
+          } catch (err) { reject(err); }
+        } else {
+          reject(new Error("Xirsys API Error " + xhr.status));
+        }
+      }
+    };
+    xhr.open("PUT", "https://global.xirsys.net/_turn/robocam", true);
+    xhr.setRequestHeader("Authorization", "Basic " + btoa("aborsro:e2d37f0c-800f-11f0-98d4-0242ac150002"));
+    xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.send(JSON.stringify({ format: "urls" }));
+  });
+}
 
 function hideRemote() {
   remoteOut = !remoteOut;
@@ -287,7 +246,14 @@ async function start(role) {
   if (role === 'receiver') receiverBtn.classList.add('active');
   stopBtn.style.display = 'block';
   setAppState(ConnectionState.WAITING);
-  pc = new RTCPeerConnection();
+
+  // --- Hier ICE Server von Xirsys einfügen ---
+  const iceServers = await fetchIceServers().catch(e => {
+    console.error("ICE Server fetch fehlgeschlagen:", e);
+    return [];
+  });
+  pc = new RTCPeerConnection({ iceServers });
+
   pc.ontrack = e => {
     document.getElementById('remoteVideo').srcObject = e.streams[0];
     setAppState(ConnectionState.CONNECTED);

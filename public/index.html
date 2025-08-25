@@ -85,7 +85,7 @@
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-    <span>robocam</span>v17
+    <span>robocam</span>v18
   </div>
   <br>
   <div class="top-bar">
@@ -200,20 +200,31 @@ const ROOM_ID = 'id1';
 
 // WebSocket verbinden
 function connectWebSocket() {
-  const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
+  const wsProtocol = location.protocol === "https:" ? "wss" : "ws";
   ws = new WebSocket(`${wsProtocol}://${location.host}/ws`);
 
   ws.onopen = () => {
     console.log("[DEBUG] WebSocket verbunden");
-    if (myRole) ws.send(JSON.stringify({ type: 'register', role: myRole, roomId: ROOM_ID }));
+    if (myRole)
+      ws.send(JSON.stringify({ type: "register", role: myRole, roomId: ROOM_ID }));
     setAppState(ConnectionState.WAITING);
   };
+
   ws.onmessage = handleMessage;
   ws.onerror = e => console.error("[DEBUG] WebSocket Fehler:", e);
+
   ws.onclose = () => {
-    console.warn("[DEBUG] WebSocket closed â€“ try reconnect ...");
+    console.warn("[DEBUG] WebSocket closed – try reconnect ...");
     setAppState(ConnectionState.ERROR);
-    setTimeout(connectWebSocket, reconnectInterval);
+    setTimeout(() => {
+      connectWebSocket();
+      if (myRole) {
+        ws.addEventListener("open", () => {
+          ws.send(JSON.stringify({ type: "register", role: myRole, roomId: ROOM_ID }));
+          if (myRole === "sender") fillCameraSelect();
+        }, { once: true });
+      }
+    }, reconnectInterval);
   };
 }
 connectWebSocket();
@@ -349,28 +360,33 @@ async function start(role) {
   }
 }
 
+// --- Kameraauswahl füllen ---
 async function fillCameraSelect() {
+  // Berechtigung anfordern, damit Labels sichtbar sind
+  await navigator.mediaDevices.getUserMedia({ video: true });
+
   const devices = await navigator.mediaDevices.enumerateDevices();
-  const videoDevices = devices.filter(device => device.kind === 'videoinput');
-  const select = document.getElementById('cameraSelect');
-  select.innerHTML = '';
+  const videoDevices = devices.filter(d => d.kind === "videoinput");
+  const select = document.getElementById("cameraSelect");
+  select.innerHTML = "";
 
-  videoDevices.forEach((device, index) => {
-    const option = document.createElement('option');
-    option.value = device.deviceId;
-    option.text = device.label || `Kamera ${index + 1}`;
-    select.appendChild(option);
+  videoDevices.forEach((device, i) => {
+    const opt = document.createElement("option");
+    opt.value = device.deviceId;
+    opt.textContent = device.label || `Kamera ${i+1}`;
+    select.appendChild(opt);
   });
 
-  if (videoDevices.length > 0) {
-    select.value = videoDevices[0].deviceId; // Standardkamera
-    select.style.display = 'block';
-  }
+  if (videoDevices.length > 0) select.style.display = "block";
 
-  // Event: Kamera wechseln
-  select.addEventListener('change', async () => {
-    await startLocalStreamAndOffer(); // Stoppt alten Stream, startet neuen
-  });
+  // Nur eine Kamera: start Video, sonst auf change reagieren
+    if (videoDevices.length == 1) { 
+	  startLocalStreamAndOffer;
+	} else {
+       select.onchange = async () => {
+       await startLocalStreamAndOffer();
+       };
+	}
 }
 
 async function startLocalStreamAndOffer() {

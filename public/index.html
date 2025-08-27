@@ -92,7 +92,7 @@
     <div class="buttons">
       <button id="senderBtn" onclick="start('sender')">send</button>
       <button id="receiverBtn" onclick="start('receiver')">receive</button>
-      <button id="stopBtn" onclick="stopAll()" style="display:none;">Stop</button>
+      <button id="stopBtn" onclick="stopAll()" style="display:none;">stop</button>
       <button id="audioBtn" onclick="toggleAudio()">audio on</button>
       <button id="blackoutBtn" onclick="blackoutScreen()">blackout</button>
       <button id="reconnectBtn" onclick="attemptReconnect()" style="display:none;">Erneut verbinden</button>
@@ -112,13 +112,13 @@
 </div>
 
 <script>
-    const localVideo = document.getElementById("localVideo");
-    const remoteVideo = document.getElementById("remoteVideo");
-    const toggleBtn = document.getElementById("toggleSizeBtn");
-    let pc;
-    let ws;
-    let role; // "sender" oder "receiver"
-    let full = false;
+const localVideo = document.getElementById("localVideo");
+const remoteVideo = document.getElementById("remoteVideo");
+const toggleBtn = document.getElementById("toggleSizeBtn");
+let pc;
+let ws;
+let role; // "sender" oder "receiver"
+let full = false;
 
     // Button-Handler für volle Breite
     toggleBtn.onclick = () => {
@@ -136,40 +136,52 @@
 	
 // --- Login / Passwort-Logik ---
 async function login() {
-  const pw = document.getElementById("password").value;
-  const res = await fetch("/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password: pw })
-  });
-  const data = await res.json();
+  try {
+    const pw = document.getElementById("password").value;
+    const res = await fetch("/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: pw })
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
 
-  if (data.success) {
-    document.getElementById("loginForm").style.display = "none";
-    if (data.message === "master") {
-       document.getElementById("changeForm").style.display = "block";
+    if (data.success) {
+      document.getElementById("loginForm").style.display = "none";
+      if (data.message === "master") {
+         document.getElementById("changeForm").style.display = "block";
+      } else {
+         document.getElementById("app").style.display = "block";
+      }
     } else {
-       document.getElementById("app").style.display = "block";
+      document.getElementById("loginMsg").innerText = "Wrong Password!";
     }
-  } else {
-    document.getElementById("loginMsg").innerText = "Wrong Password!";
+  } catch (err) {
+    console.error("Login-Fehler:", err);
+    document.getElementById("loginMsg").innerText = "Serverfehler!";
   }
 }
 
 async function changePassword() {
-  const newPw = document.getElementById("newPassword").value;
-  const master = document.getElementById("password").value;
+  try {
+    const newPw = document.getElementById("newPassword").value;
+    const master = document.getElementById("password").value;
 
-  const res = await fetch("/change-password", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ master: master, newPassword: newPw })
-  });
-  const data = await res.json();
-  document.getElementById("changeMsg").innerText = data.message;
-  document.getElementById("loginForm").style.display = "block";
-  document.getElementById("changeForm").style.display = "none";
-  document.getElementById('password').value = "";
+    const res = await fetch("/change-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ master: master, newPassword: newPw })
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    document.getElementById("changeMsg").innerText = data.message;
+    document.getElementById("loginForm").style.display = "block";
+    document.getElementById("changeForm").style.display = "none";
+    document.getElementById('password').value = "";
+  } catch (err) {
+    console.error("Passwort-Änderung Fehler:", err);
+    document.getElementById("changeMsg").innerText = "Serverfehler!";
+  }
 }
 
 // --- robocam Code ---
@@ -270,26 +282,38 @@ function blackoutScreen() {
 }
 
 async function handleMessage(msg) {
-  const text = msg.data instanceof Blob ? await msg.data.text() : msg.data;
-  let data;
-  try { data = JSON.parse(text); } catch { return; }
+  try {
+    const text = msg.data instanceof Blob ? await msg.data.text() : msg.data;
+    let data;
+    try { data = JSON.parse(text); } catch { return; }
 
-  if (data.type === 'receiver-ready' && myRole === 'sender') {
-    setAppState(ConnectionState.READY);
-    await startLocalStreamAndOffer();
-    return;
-  }
-  if (data.sdp) {
-    if (!pc) return;
-    await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-    if (data.sdp.type === 'offer') {
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      ws.send(JSON.stringify({ sdp: pc.localDescription }));
+    if (data.type === 'receiver-ready' && myRole === 'sender') {
+      setAppState(ConnectionState.READY);
+      await startLocalStreamAndOffer();
+      return;
     }
-  } else if (data.candidate) {
-    if (!pc) return;
-    await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+    if (data.sdp) {
+      if (!pc) return;
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        if (data.sdp.type === 'offer') {
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          ws.send(JSON.stringify({ sdp: pc.localDescription }));
+        }
+      } catch (err) {
+        console.error("setRemoteDescription error:", err);
+      }
+    } else if (data.candidate) {
+      if (!pc) return;
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+      } catch (err) {
+        console.error("addIceCandidate error:", err);
+      }
+    }
+  } catch (err) {
+    console.error("handleMessage error:", err);
   }
 }
 
@@ -324,16 +348,16 @@ async function start(role) {
   stopBtn.style.display = 'block';
   setAppState(ConnectionState.WAITING);
 
-  // --- Hier ICE Server von Xirsys einfÃ¼gen ---
-  const iceServers = await fetchIceServers().catch(e => {
+  // --- ICE Server laden ---
+  let iceServers = [];
+  try {
+    iceServers = await fetchIceServers();
+  } catch (e) {
     console.error("ICE Server fetch failed:", e);
-    return [];
-  });
+  }
   
   pc = new RTCPeerConnection({
-    iceServers: [
-      { urls: "stun:stun.l.google.com:19302" }
-    ]
+    iceServers: iceServers.length ? iceServers : [{ urls: "stun:stun.l.google.com:19302" }]
   });
   
   pc.ontrack = e => {
@@ -357,7 +381,7 @@ async function start(role) {
     if (select.options.length === 1) {
       await startLocalStreamAndOffer();
     } else {
-      select.onclick = async () => { await startLocalStreamAndOffer(); };
+      select.onchange = async () => { await startLocalStreamAndOffer(); };
     }
   }
   if (role === 'receiver') {
@@ -368,41 +392,41 @@ async function start(role) {
 
 // --- Kameraauswahl füllen ---
 async function fillCameraSelect() {
-  // Berechtigung anfordern, damit Labels sichtbar sind
-  await navigator.mediaDevices.getUserMedia({ video: true });
+  try {
+    await navigator.mediaDevices.getUserMedia({ video: true });
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = devices.filter(d => d.kind === "videoinput");
+    const select = document.getElementById("cameraSelect");
+    select.innerHTML = "";
 
-  const devices = await navigator.mediaDevices.enumerateDevices();
-  const videoDevices = devices.filter(d => d.kind === "videoinput");
-  const select = document.getElementById("cameraSelect");
-  select.innerHTML = "";
+    videoDevices.forEach((device, i) => {
+      const opt = document.createElement("option");
+      opt.value = device.deviceId;
+      opt.textContent = device.label || `Kamera ${i+1}`;
+      select.appendChild(opt);
+    });
 
-  videoDevices.forEach((device, i) => {
-    const opt = document.createElement("option");
-    opt.value = device.deviceId;
-    opt.textContent = device.label || `Kamera ${i+1}`;
-    select.appendChild(opt);
-  });
+    if (videoDevices.length > 0) select.style.display = "block";
 
-  if (videoDevices.length > 0) select.style.display = "block";
-
-  // Nur eine Kamera: start Video, sonst auf change reagieren
-    if (videoDevices.length == 1) { 
-	  startLocalStreamAndOffer;
-	} else {
-       select.onchange = async () => {
-       await startLocalStreamAndOffer();
-       };
-	}
+    if (videoDevices.length === 1) { 
+      await startLocalStreamAndOffer();
+    } else {
+      select.onchange = async () => { await startLocalStreamAndOffer(); };
+    }
+  } catch (err) {
+    console.error("fillCameraSelect error:", err);
+  }
 }
 
 async function startLocalStreamAndOffer() {
-  if (localStream) { 
-    localStream.getTracks().forEach(track => track.stop()); 
-    localStream = null; 
-  }
+  try {
+    if (localStream) { 
+      localStream.getTracks().forEach(track => track.stop()); 
+      localStream = null; 
+    }
 
-  const select = document.getElementById('cameraSelect');
-  const videoConstraints = select.value ? { deviceId: { exact: select.value } } : true;
+    const select = document.getElementById('cameraSelect');
+    const videoConstraints = select.value ? { deviceId: { exact: select.value } } : true;
 
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ 
@@ -415,17 +439,20 @@ async function startLocalStreamAndOffer() {
     return;
   }
 
-  localStream.getTracks().forEach(track => { if (pc) pc.addTrack(track, localStream); });
-  localVideo.srcObject = localStream;
+    localStream.getTracks().forEach(track => { if (pc) pc.addTrack(track, localStream); });
+    localVideo.srcObject = localStream;
 
-  if (!localOfferSent && pc) {
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    ws.send(JSON.stringify({ sdp: pc.localDescription }));
-    localOfferSent = true;
+    if (!localOfferSent && pc) {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      ws.send(JSON.stringify({ sdp: pc.localDescription }));
+      localOfferSent = true;
+    }
+  } catch (e) {
+    console.error("startLocalStreamAndOffer error:", e);
+    alert("Cam/Mic access not granted or available");
   }
 }
-
 
 function toggleAudio() {
   audioSetting = !audioSetting;

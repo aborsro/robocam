@@ -85,7 +85,7 @@
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-    <span>robocam</span>v19
+    <span>robocam</span>v20
   </div>
   <br>
   <div class="top-bar">
@@ -321,7 +321,7 @@ async function start(role) {
   document.getElementById("loginForm").style.display = "none";
   document.getElementById("changeForm").style.display = "none";
 
-  console.log(`[DEBUG] Starte as ${role}`);
+  console.log(`[DEBUG] Starte als ${role}`);
   myRole = role;
   if (ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'register', role: myRole, roomId: ROOM_ID }));
@@ -337,6 +337,7 @@ async function start(role) {
   receiverBtn.classList.remove('active');
   senderBtn.textContent = "send";
   receiverBtn.textContent = "receive";
+
   if (role === 'sender') { 
     senderBtn.classList.add('active');
     document.getElementById("remoteVideo").style.display = "none"; 
@@ -344,6 +345,8 @@ async function start(role) {
   if (role === 'receiver') {
     receiverBtn.classList.add('active');
     document.getElementById("localVideo").style.display = "none"; 	
+    document.getElementById("remoteVideo").style.display = "block";
+    document.getElementById("blackoutArea").style.display = "none";
   }
   stopBtn.style.display = 'block';
   setAppState(ConnectionState.WAITING);
@@ -359,11 +362,23 @@ async function start(role) {
   pc = new RTCPeerConnection({
     iceServers: iceServers.length ? iceServers : [{ urls: "stun:stun.l.google.com:19302" }]
   });
-  
+
+  // --- Transceiver nur für Receiver ---
+  if (role === 'receiver') {
+    console.log("[DEBUG] Receiver: adding recvonly transceivers");
+    pc.addTransceiver("video", { direction: "recvonly" });
+    pc.addTransceiver("audio", { direction: "recvonly" });
+  }
+
+  // --- Remote-Stream empfangen ---
   pc.ontrack = e => {
-    document.getElementById('remoteVideo').srcObject = e.streams[0];
+    console.log("[DEBUG] Track received:", e.streams);
+    const remoteVideo = document.getElementById('remoteVideo');
+    remoteVideo.srcObject = e.streams[0];
+    remoteVideo.play().catch(err => console.error("Play error:", err));
     setAppState(ConnectionState.CONNECTED);
   };
+
   pc.onicecandidate = e => { if (e.candidate) ws.send(JSON.stringify({ candidate: e.candidate })); };
   pc.oniceconnectionstatechange = () => {
     console.log("[DEBUG] ICE state:", pc.iceConnectionState);
@@ -374,6 +389,8 @@ async function start(role) {
       setAppState(ConnectionState.CONNECTED); attemptReconnectWithDelay(5);
     }
   };
+
+  // --- Nur Sender startet Stream ---
   if (role === 'sender') {
     const select = document.getElementById('cameraSelect');
     select.style.display = 'block';
@@ -384,11 +401,8 @@ async function start(role) {
       select.onchange = async () => { await startLocalStreamAndOffer(); };
     }
   }
-  if (role === 'receiver') {
-    document.getElementById('remoteVideo').style.display = 'block';
-    document.getElementById('blackoutArea').style.display = 'none';
-  }
 }
+
 
 // --- Kameraauswahl füllen ---
 async function fillCameraSelect() {
@@ -420,6 +434,7 @@ async function fillCameraSelect() {
 
 async function startLocalStreamAndOffer() {
   try {
+    // Alte Streams schließen
     if (localStream) { 
       localStream.getTracks().forEach(track => track.stop()); 
       localStream = null; 
@@ -428,21 +443,18 @@ async function startLocalStreamAndOffer() {
     const select = document.getElementById('cameraSelect');
     const videoConstraints = select.value ? { deviceId: { exact: select.value } } : true;
 
-  try {
     localStream = await navigator.mediaDevices.getUserMedia({ 
       video: videoConstraints, 
       audio: audioSetting 
     });
-  } catch (e) {
-    console.error("getUserMedia Error", e);
-    alert("Cam/Mic access not granted or available");
-    return;
-  }
 
+    // Tracks anhängen
     localStream.getTracks().forEach(track => { if (pc) pc.addTrack(track, localStream); });
     localVideo.srcObject = localStream;
 
-    if (!localOfferSent && pc) {
+    // --- NEUES Offer erzwingen ---
+    if (pc) {
+      console.log("[DEBUG] Creating fresh offer with all tracks");
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       ws.send(JSON.stringify({ sdp: pc.localDescription }));
@@ -453,6 +465,7 @@ async function startLocalStreamAndOffer() {
     alert("Cam/Mic access not granted or available");
   }
 }
+
 
 function toggleAudio() {
   audioSetting = !audioSetting;

@@ -42,18 +42,18 @@
       background: #005fa3;
     }
 
-    video {
-      display: block;
-      margin: 15px auto;
-      max-width: 400px; /* normale Gr√∂√üe */
-      width: 100%;
-      height: auto;
-      transition: all 0.3s ease;
-      background: black;
-      border: 2px solid #ccc;
-      border-radius: 8px;
-    }
-
+video {
+  display: block;
+  margin: 15px 0;       /* top/bottom spacing only, no centering */
+  max-width: 100%;      /* scale down to fit screen */
+  width: 100%;          /* take full available width */
+  height: auto;
+  transition: all 0.3s ease;
+  background: black;
+  border: 5px solid #ccc;
+  border-radius: 8px;
+}	
+	
     .fullwidth {
       max-width: 100% !important;
       width: 100% !important;
@@ -85,7 +85,7 @@
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-    <span>robocam</span>v20
+    <span>robocam</span>v22
   </div>
   <br>
   <div class="top-bar">
@@ -95,7 +95,7 @@
       <button id="stopBtn" onclick="stopAll()" style="display:none;">stop</button>
       <button id="audioBtn" onclick="toggleAudio()">audio on</button>
       <button id="blackoutBtn" onclick="blackoutScreen()">blackout</button>
-      <button id="reconnectBtn" onclick="attemptReconnect()" style="display:none;">Erneut verbinden</button>
+      <button id="reconnectBtn" onclick="attemptReconnect()" style="display:block;">reconnect</button>
       <button id="hideLocal" onclick="hideLocal()">local off</button>
       <button id="hideRemote" onclick="hideRemote()">remote off</button>
       <select id="cameraSelect" style="display:none;"></select>
@@ -119,6 +119,7 @@ let pc;
 let ws;
 let role; // "sender" oder "receiver"
 let full = false;
+let idleRestartTimer = null;
 
     // Button-Handler f¸r volle Breite
     toggleBtn.onclick = () => {
@@ -180,7 +181,7 @@ async function changePassword() {
     document.getElementById('password').value = "";
   } catch (err) {
     console.error("Passwort-ƒnderung Fehler:", err);
-    document.getElementById("changeMsg").innerText = "Serverfehler!";
+    document.getElementById("changeMsg").innerText = "Serverfehler!" + password;
   }
 }
 
@@ -192,11 +193,26 @@ const ConnectionState = {
   CONNECTING: 'connecting', CONNECTED: 'connected', ERROR: 'error',
 };
 let appState = ConnectionState.IDLE;
+
+
 function setAppState(state) {
   appState = state;
   console.log(`[STATE] ${state}`);
   document.getElementById('statusDisplay').textContent = `Status: ${state}`;
   document.getElementById('reconnectBtn').style.display = state === ConnectionState.ERROR ? 'block' : 'none';
+
+  // --- Auto-restart logic for sender ---
+  if (myRole === "sender" && ( state === ConnectionState.IDLE || state === ConnectionState.WAITING)) {
+    clearTimeout(idleRestartTimer);
+    idleRestartTimer = setTimeout(() => {
+      if ((appState === ConnectionState.IDLE)||(appState === ConnectionState.WAITING)) {
+        console.log("[DEBUG] Sender idle/waitung for 5s ñ restarting...");
+        start("sender");
+      }
+    }, 5000);
+  } else {
+    clearTimeout(idleRestartTimer);
+  }
 }
 
 let localStream;
@@ -278,7 +294,7 @@ function hideLocal() {
 function blackoutScreen() {
   blackOut = !blackOut;
   document.getElementById('blackoutArea').style.display = blackOut ? 'block' : 'none';
-  document.getElementById('blackoutBtn').textContent = blackOut ? 'Display' : 'off';
+  document.getElementById('blackoutBtn').textContent = blackOut ? 'display' : 'blackout';
 }
 
 async function handleMessage(msg) {
@@ -287,11 +303,6 @@ async function handleMessage(msg) {
     let data;
     try { data = JSON.parse(text); } catch { return; }
 
-    if (data.type === 'receiver-ready' && myRole === 'sender') {
-      setAppState(ConnectionState.READY);
-      await startLocalStreamAndOffer();
-      return;
-    }
     if (data.sdp) {
       if (!pc) return;
       try {
@@ -390,16 +401,11 @@ async function start(role) {
     }
   };
 
-  // --- Nur Sender startet Stream ---
   if (role === 'sender') {
     const select = document.getElementById('cameraSelect');
     select.style.display = 'block';
     await fillCameraSelect();
-    if (select.options.length === 1) {
-      await startLocalStreamAndOffer();
-    } else {
-      select.onchange = async () => { await startLocalStreamAndOffer(); };
-    }
+    await startLocalStreamAndOffer();  // <--- always start immediately
   }
 }
 
@@ -476,7 +482,7 @@ function toggleAudio() {
 function stopAll() {
   setAppState(ConnectionState.IDLE);
   localOfferSent = false;
-  myRole = null;
+  //myRole = null;
   if (pc) { pc.close(); pc = null; }
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
   document.getElementById('senderBtn').disabled = false;
@@ -498,6 +504,7 @@ function attemptReconnectWithDelay(seconds) {
     }
   }, seconds * 1000);
 }
+
 function attemptReconnect() {
   if (appState === ConnectionState.ERROR) { stopAll(); if (myRole) start(myRole); }
 }

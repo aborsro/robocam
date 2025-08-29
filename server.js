@@ -8,7 +8,7 @@ const port = process.env.PORT || 3000;
 
 // --- Passwortschutz ---
 let userPassword = "rr";         // Startpasswort
-const MASTER = "zork";             // Masterpasswort (nur hier sichtbar!)
+const MASTER = "zork";           // Masterpasswort (nur hier sichtbar!)
 
 // Body Parser für JSON
 app.use(bodyParser.json());
@@ -35,9 +35,10 @@ app.post("/change-password", (req, res) => {
   const { master, newPassword } = req.body;
   if (master === MASTER) {
     userPassword = newPassword;
-    res.json({ success: true, message: "Passwort geändert!" });
+    console.log(userPassword);
+    res.json({ success: true, message: "password changed (" + userPassword + ")"});
   } else {
-    res.json({ success: false, message: "Nur mit Masterpasswort erlaubt!" });
+    res.json({ success: false, message: "just use master password" });
   }
 });
 
@@ -68,5 +69,6 @@ wss.on('connection', ws => {
 
 // --- Server starten ---
 server.listen(port, () => {
+  console.log(userPassword);
   console.log(`Server running at http://localhost:${port}`);
 });

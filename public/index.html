@@ -602,7 +602,7 @@ function rotateVideo(angle) {
 if (isIOS() || isAndroid()) {
   // iOS: orientationchange
   window.addEventListener('orientationchange', () => {
-    rotateVideo(window.orientation+90 || 0);
+    rotateVideo(window.orientation+270 || 0);
   });
 
   // Android: deviceorientation für zuverlässige Drehung

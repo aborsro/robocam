@@ -584,6 +584,33 @@ function attemptReconnectWithDelay(seconds) {
 function attemptReconnect() {
   if (appState === ConnectionState.ERROR) { stopAll(); if (myRole) start(myRole); }
 }
+
+
+// Minimaler JS-Drehungscode nur für mobile Geräte
+function isIOS() { return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream; }
+function isAndroid() { return /Android/.test(navigator.userAgent); }
+
+function rotateVideo(angle) {
+  video.style.transform = `rotate(${angle}deg)`;
+}
+
+if (isIOS() || isAndroid()) {
+  // iOS: orientationchange
+  window.addEventListener('orientationchange', () => {
+    rotateVideo(window.orientation || 0);
+  });
+
+  // Android: deviceorientation für zuverlässige Drehung
+  if (isAndroid()) {
+    window.addEventListener('deviceorientation', (event) => {
+      if (Math.abs(event.gamma) > 45) {
+        rotateVideo(event.gamma > 0 ? 90 : -90);
+      } else {
+        rotateVideo(0);
+      }
+    });
+  }
+}
 </script>
 </body>
 </html>

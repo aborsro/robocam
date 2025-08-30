@@ -6,14 +6,54 @@
 <title>robocam</title>
 <style>
   body { font-family: sans-serif; display: flex; flex-direction: column; padding: 20px; background: linear-gradient(to bottom, #f4f4f4, #e0e0e0); min-height: 100vh; }
-  #loginForm, #changeForm { margin-bottom: 20px; }
+  #loginForm, #changeForm { margin-bottom: 20px;}
+  
+  .form-row {
+  display: flex;
+  align-items: center;  /* vertically center button with input */
+  gap: 15px;            /* increase spacing between input and button */
+  margin-bottom: 10px;  /* space below row */
+}
+
+.form-row input {
+  flex: 1;               /* input takes remaining space */
+  padding: 6px 10px;
+  height: 33px;          /* match button height */
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 14px;
+}
+
   #app { display: none; }
   #statusDisplay { margin-top: 10px; font-weight: bold; }
   .top-bar { display: flex; align-items: left; justify-content: left; gap: 10px; flex-wrap: wrap; width: 100%; max-width: 600px; margin-bottom: 10px; }
   .buttons { display: flex; flex-wrap: wrap; gap: 8px; }
   .app-icon { width: 40px; height: 40px; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.2); }
   h1 { margin: 10px; font-size: 1.8em; color: #333; }
-  button, select { font-size: 1.0em; padding: 8px 16px; margin: 0; width: auto; max-width: none; border: none; border-radius: 10px; background-color: #808080; color: white; cursor: pointer; transition: background-color 0.3s, transform 0.1s; }
+
+  button, select, #toggleSizeBtn {
+  font-size: 1.0em;
+  margin: 0;
+  width: auto;
+  max-width: none;
+  border: none;
+  border-radius: 10px;
+  background-color: #808080;
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.1s;
+
+  /* uniform size */
+  height: 33px;
+  padding: 0 16px;          /* only horizontal padding */
+  
+  /* center text vertically */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+
   button:hover:enabled { background-color: #45a049; }
   button:disabled { cursor: not-allowed; opacity: 0.8; }
   button.active { background-color: #00FF00; transform: scale(1.05); }
@@ -42,18 +82,38 @@
       background: #005fa3;
     }
 
+.video-container {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  margin: 10px 0;
+  display: inline-block; /* keeps video + overlay aligned */
+}
+
 video {
   display: block;
-  margin: 15px 0;       /* top/bottom spacing only, no centering */
-  max-width: 100%;      /* scale down to fit screen */
-  width: 100%;          /* take full available width */
+  width: 100%;       /* fill width */
   height: auto;
-  transition: all 0.3s ease;
   background: black;
-  border: 5px solid #ccc;
+  border: 3px solid #ccc;
   border-radius: 8px;
-}	
-	
+  position: relative;  /* important: create a new stacking context */
+  z-index: 1;          /* video stays below */
+}
+
+.status-overlay {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  z-index: 2;           /* overlay on top of video */
+  pointer-events: none; /* clicks pass through */
+}
+
     .fullwidth {
       max-width: 100% !important;
       width: 100% !important;
@@ -66,18 +126,23 @@ video {
 </head>
 <body>
 
-<!-- Login -->
+<!-- Login Form -->
 <div id="loginForm">
-   <h2>Login for ROBOCAM</h2>
-  <input type="password" id="password" placeholder="enter password">
-  <button onclick="login()">Login</button>
+  <h2>Login for ROBOCAM</h2>
+  <div class="form-row">
+    <input type="password" id="password" placeholder="enter password">
+    <button onclick="login()">Login</button>
+  </div>
   <p id="loginMsg"></p>
 </div>
 
+<!-- Change Password Form -->
 <div id="changeForm" style="display:none;">
-  <h3>change password (master only)</h3>
-  <input type="password" id="newPassword" placeholder="new password">
-  <button onclick="changePassword()">change</button>
+  <h3>Change password (master only)</h3>
+  <div class="form-row">
+    <input type="password" id="newPassword" placeholder="new password">
+    <button onclick="changePassword()">Change</button>
+  </div>
   <p id="changeMsg"></p>
 </div>
 
@@ -85,30 +150,33 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-    <span>robocam</span>v22
+   <span>robocam</span>v24
   </div>
   <br>
   <div class="top-bar">
-    <div class="buttons">
-      <button id="senderBtn" onclick="start('sender')">send</button>
+   <div class="buttons">
+  	 	<div id="controls">
+       <button id="toggleSizeBtn">📺 wide</button>
+    </div>
+     <button id="senderBtn" onclick="start('sender')">send</button>
       <button id="receiverBtn" onclick="start('receiver')">receive</button>
       <button id="stopBtn" onclick="stopAll()" style="display:none;">stop</button>
       <button id="audioBtn" onclick="toggleAudio()">audio on</button>
       <button id="blackoutBtn" onclick="blackoutScreen()">blackout</button>
-      <button id="reconnectBtn" onclick="attemptReconnect()" style="display:block;">reconnect</button>
-      <button id="hideLocal" onclick="hideLocal()">local off</button>
-      <button id="hideRemote" onclick="hideRemote()">remote off</button>
       <select id="cameraSelect" style="display:none;"></select>
     </div>
     <div id="blackoutArea"></div>
-	<div id="controls">
-       <button id="toggleSizeBtn">📺 video wide</button>
+  </div>
+  
+  <div class="video-container">
+    <video id="remoteVideo" autoplay playsinline></video>
+    <div id="remoteStatus" class="status-overlay">Status: idle</div>
   </div>
 
+  <div class="video-container">
+    <video id="localVideo" autoplay muted playsinline></video>
+    <div id="localStatus" class="status-overlay"></div>
   </div>
-  <div id="statusDisplay">Status: idle</div>
-  <video id="remoteVideo" autoplay playsinline></video>
-  <video id="localVideo" autoplay muted playsinline></video>
 </div>
 
 <script>
@@ -127,11 +195,11 @@ let idleRestartTimer = null;
       if (full) {
         localVideo.classList.add("fullwidth");
         remoteVideo.classList.add("fullwidth");
-        toggleBtn.textContent = "🔙 video normal";
+        toggleBtn.textContent = "🔙 normal";
       } else {
         localVideo.classList.remove("fullwidth");
         remoteVideo.classList.remove("fullwidth");
-        toggleBtn.textContent = "📺 video wide";
+        toggleBtn.textContent = "📺 wide";
       }
     };
 	
@@ -198,9 +266,16 @@ let appState = ConnectionState.IDLE;
 function setAppState(state) {
   appState = state;
   console.log(`[STATE] ${state}`);
-  document.getElementById('statusDisplay').textContent = `Status: ${state}`;
-  document.getElementById('reconnectBtn').style.display = state === ConnectionState.ERROR ? 'block' : 'none';
+//  document.getElementById('statusDisplay').textContent = `Status: ${state}`;
 
+  // Show status inside remote video overlay
+  const remoteStatus = document.getElementById('remoteStatus');
+  if (remoteStatus) remoteStatus.textContent = `Status: ${state}`;
+
+  // optional: also update local overlay if needed
+  const localStatus = document.getElementById('localStatus');
+  if (localStatus) localStatus.textContent = `Status: ${state}`; 
+  
   // --- Auto-restart logic for sender ---
   if (myRole === "sender" && ( state === ConnectionState.IDLE || state === ConnectionState.WAITING)) {
     clearTimeout(idleRestartTimer);
@@ -225,6 +300,13 @@ let audioSetting = true;
 
 const reconnectInterval = 3000;
 const ROOM_ID = 'id1';
+
+// Videos aus, werden bei send/receive eingeschaltet
+document.getElementById('remoteVideo').style.display = 'none';
+document.getElementById('localVideo').style.display = 'none';
+document.getElementById("localStatus").style.display = "none";
+document.getElementById("remoteStatus").style.display = "none";
+
 
 // WebSocket verbinden
 function connectWebSocket() {
@@ -281,16 +363,7 @@ async function fetchIceServers() {
   });
 }
 
-function hideRemote() {
-  remoteOut = !remoteOut;
-  document.getElementById('remoteVideo').style.display = remoteOut ? 'block' : 'none';
-  document.getElementById('hideRemote').textContent = remoteOut ? 'remote off' : 'remote on';
-}
-function hideLocal() {
-  localOut = !localOut;
-  document.getElementById('localVideo').style.display = localOut ? 'block' : 'none';
-  document.getElementById('hideLocal').textContent = localOut ? 'local off' : 'local on';
-}
+
 function blackoutScreen() {
   blackOut = !blackOut;
   document.getElementById('blackoutArea').style.display = blackOut ? 'block' : 'none';
@@ -351,13 +424,16 @@ async function start(role) {
 
   if (role === 'sender') { 
     senderBtn.classList.add('active');
-    document.getElementById("remoteVideo").style.display = "none"; 
+    document.getElementById("localVideo").style.display = "block"; 
+    document.getElementById("remoteStatus").style.display = "none";
+    document.getElementById("localStatus").style.display = "block";
   }
   if (role === 'receiver') {
     receiverBtn.classList.add('active');
-    document.getElementById("localVideo").style.display = "none"; 	
     document.getElementById("remoteVideo").style.display = "block";
     document.getElementById("blackoutArea").style.display = "none";
+    document.getElementById("localStatus").style.display = "none";
+    document.getElementById("remoteStatus").style.display = "block";
   }
   stopBtn.style.display = 'block';
   setAppState(ConnectionState.WAITING);
@@ -491,8 +567,8 @@ function stopAll() {
   document.getElementById('receiverBtn').classList.remove('active');
   document.getElementById('stopBtn').style.display = 'none';
   document.getElementById('cameraSelect').style.display = 'none';
-  document.getElementById('localVideo').srcObject = null;
-  document.getElementById('remoteVideo').srcObject = null;
+//  document.getElementById('localVideo').srcObject = null;
+//  document.getElementById('remoteVideo').srcObject = null;
   document.getElementById('blackoutArea').style.display = 'none';
 }
 

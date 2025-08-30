@@ -62,7 +62,7 @@
   
   #localVideo, #remoteVideo {
     width: 80%; max-width: 100%;
-    transform: rotate(180deg); /* dreht den Stream richtig */
+    transform: rotate(0deg); /* dreht den Stream richtig */
     transform-origin: center center;
   }
 
@@ -602,7 +602,7 @@ function rotateVideo(angle) {
 if (isIOS() || isAndroid()) {
   // iOS: orientationchange
   window.addEventListener('orientationchange', () => {
-    rotateVideo(window.orientation || 0);
+    rotateVideo(window.orientation+180 || 0);
   });
 
   // Android: deviceorientation für zuverlässige Drehung

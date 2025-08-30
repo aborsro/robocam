@@ -59,8 +59,13 @@
   button.active { background-color: #00FF00; transform: scale(1.05); }
   #stopBtn { background-color: #FF0000; }
   #stopBtn:hover:enabled { background-color: #d32f2f; }
-  #remoteVideo { width: 80%; max-width: 100%; }
-  #localVideo { width: 80%; max-width: 100%; }
+  
+  #localVideo, #remoteVideo {
+    width: 80%; max-width: 100%;
+    transform: rotate(180deg); /* dreht den Stream richtig */
+    transform-origin: center center;
+  }
+
   #blackoutBtn { background-color: grey; opacity: 1; z-index: 99999; }
   #audioBtn { background-color: grey; opacity: 1; z-index: 99998; }
   #blackoutArea { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: black; opacity: 1; z-index: 99998; }

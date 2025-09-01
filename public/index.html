@@ -59,13 +59,8 @@
   button.active { background-color: #00FF00; transform: scale(1.05); }
   #stopBtn { background-color: #FF0000; }
   #stopBtn:hover:enabled { background-color: #d32f2f; }
-  
-  #localVideo, #remoteVideo {
-    width: 80%; max-width: 100%;
-    transform: rotate(0deg); /* dreht den Stream richtig */
-    transform-origin: center center;
-  }
-
+  #remoteVideo { width: 80%; max-width: 100%; }
+  #localVideo { width: 80%; max-width: 100%; }
   #blackoutBtn { background-color: grey; opacity: 1; z-index: 99999; }
   #audioBtn { background-color: grey; opacity: 1; z-index: 99998; }
   #blackoutArea { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: black; opacity: 1; z-index: 99998; }
@@ -155,7 +150,8 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v24
+   <span>robocam</span>v25
+   <input type="text" id="infoMsg">
   </div>
   <br>
   <div class="top-bar">
@@ -262,11 +258,16 @@ async function changePassword() {
 console.log("[DEBUG] Initialising ROBOCAM App");
 
 const ConnectionState = {
-  ORIENTATION: 'change', IDLE: 'idle', WAITING: 'waiting', READY: 'ready',
+  IDLE: 'idle', WAITING: 'waiting', READY: 'ready',
   CONNECTING: 'connecting', CONNECTED: 'connected', ERROR: 'error',
 };
 let appState = ConnectionState.IDLE;
 
+
+function setInfoMsg(msg) {
+  const infoMsg = document.getElementById('infoMsg');
+  if (infoMsg) infoMsg.value = `${msg}`;
+}
 
 function setAppState(state) {
   appState = state;
@@ -330,13 +331,14 @@ function connectWebSocket() {
 
   ws.onclose = () => {
     console.warn("[DEBUG] WebSocket closed – try reconnect ...");
+	setInfoMsg("websocket try reconnect");
     setAppState(ConnectionState.ERROR);
     setTimeout(() => {
       connectWebSocket();
       if (myRole) {
         ws.addEventListener("open", () => {
           ws.send(JSON.stringify({ type: "register", role: myRole, roomId: ROOM_ID }));
-          if (myRole === "sender") fillCameraSelect();
+ //         if (myRole === "sender") fillCameraSelect();
         }, { once: true });
       }
     }, reconnectInterval);
@@ -428,12 +430,14 @@ async function start(role) {
   receiverBtn.textContent = "receive";
 
   if (role === 'sender') { 
+    setInfoMsg("start sender");
     senderBtn.classList.add('active');
     document.getElementById("localVideo").style.display = "block"; 
     document.getElementById("remoteStatus").style.display = "none";
     document.getElementById("localStatus").style.display = "block";
   }
   if (role === 'receiver') {
+    setInfoMsg("start receiver");
     receiverBtn.classList.add('active');
     document.getElementById("remoteVideo").style.display = "block";
     document.getElementById("blackoutArea").style.display = "none";
@@ -486,7 +490,6 @@ async function start(role) {
     const select = document.getElementById('cameraSelect');
     select.style.display = 'block';
     await fillCameraSelect();
-    await startLocalStreamAndOffer();  // <--- always start immediately
   }
 }
 
@@ -494,6 +497,7 @@ async function start(role) {
 // --- Kameraauswahl füllen ---
 async function fillCameraSelect() {
   try {
+    setInfoMsg("fillCameraSelect");
     await navigator.mediaDevices.getUserMedia({ video: true });
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter(d => d.kind === "videoinput");
@@ -521,6 +525,8 @@ async function fillCameraSelect() {
 
 async function startLocalStreamAndOffer() {
   try {
+  	  setInfoMsg("startLocalStreamAndOffer");
+
     // Alte Streams schließen
     if (localStream) { 
       localStream.getTracks().forEach(track => track.stop()); 
@@ -561,6 +567,7 @@ function toggleAudio() {
 }
 
 function stopAll() {
+  setInfoMsg("stopAll");
   setAppState(ConnectionState.IDLE);
   localOfferSent = false;
   //myRole = null;
@@ -581,41 +588,15 @@ function attemptReconnectWithDelay(seconds) {
   setTimeout(() => {
     if (!pc || pc.iceConnectionState === 'disconnected') {
       console.log("[DEBUG] try to reconnect");
+	  setInfoMsg("try reconnect 1");
       stopAll(); if (myRole) start(myRole);
     }
   }, seconds * 1000);
 }
 
 function attemptReconnect() {
+	  setInfoMsg("try reconnect 2");
   if (appState === ConnectionState.ERROR) { stopAll(); if (myRole) start(myRole); }
-}
-
-
-// Minimaler JS-Drehungscode nur für mobile Geräte
-function isIOS() { return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream; }
-function isAndroid() { return /Android/.test(navigator.userAgent); }
-
-function rotateVideo(angle) {
-  video.style.transform = `rotate(${angle}deg)`;
-}
-
-if (isIOS() || isAndroid()) {
-  // iOS: orientationchange
-  window.addEventListener('orientationchange', () => {
-    rotateVideo(window.orientation-90 || 0);
-    setAppState(ConnectionState.ORIENTATION);	
-  });
-
-  // Android: deviceorientation für zuverlässige Drehung
-  if (isAndroid()) {
-    window.addEventListener('deviceorientation', (event) => {
-      if (Math.abs(event.gamma) > 45) {
-        rotateVideo(event.gamma > 0 ? 90 : -90);
-      } else {
-        rotateVideo(0);
-      }
-    });
-  }
 }
 </script>
 </body>

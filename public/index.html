@@ -151,7 +151,7 @@ video {
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
    <span>robocam</span>v25
-   <input type="text" id="infoMsg">
+   <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
   <div class="top-bar">
@@ -338,8 +338,7 @@ function connectWebSocket() {
       if (myRole) {
         ws.addEventListener("open", () => {
           ws.send(JSON.stringify({ type: "register", role: myRole, roomId: ROOM_ID }));
- //         if (myRole === "sender") fillCameraSelect();
-        }, { once: true });
+         }, { once: true });
       }
     }, reconnectInterval);
   };
@@ -431,6 +430,7 @@ async function start(role) {
 
   if (role === 'sender') { 
     setInfoMsg("start sender");
+	toggleAudio();
     senderBtn.classList.add('active');
     document.getElementById("localVideo").style.display = "block"; 
     document.getElementById("remoteStatus").style.display = "none";
@@ -482,7 +482,8 @@ async function start(role) {
       setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(5);
     }
     if (['connected'].includes(pc.iceConnectionState)) {
-      setAppState(ConnectionState.CONNECTED); attemptReconnectWithDelay(5);
+      setAppState(ConnectionState.CONNECTED);
+	  setInfoMsg(" ... live");
     }
   };
 
@@ -585,18 +586,13 @@ function stopAll() {
 }
 
 function attemptReconnectWithDelay(seconds) {
+  setInfoMsg("try reconnect");
   setTimeout(() => {
     if (!pc || pc.iceConnectionState === 'disconnected') {
       console.log("[DEBUG] try to reconnect");
-	  setInfoMsg("try reconnect 1");
       stopAll(); if (myRole) start(myRole);
     }
   }, seconds * 1000);
-}
-
-function attemptReconnect() {
-	  setInfoMsg("try reconnect 2");
-  if (appState === ConnectionState.ERROR) { stopAll(); if (myRole) start(myRole); }
 }
 </script>
 </body>

@@ -16,7 +16,6 @@
 }
 
 .form-row input {
-  flex: 1;               /* input takes remaining space */
   padding: 6px 10px;
   height: 33px;          /* match button height */
   border-radius: 8px;
@@ -130,7 +129,7 @@ video {
 <div id="loginForm">
   <h2>Login for ROBOCAM</h2>
   <div class="form-row">
-    <input type="password" id="password" placeholder="enter password">
+    <input type="password" id="password" maxlength="20" placeholder="enter password">
     <button onclick="login()">Login</button>
   </div>
   <p id="loginMsg"></p>
@@ -140,7 +139,7 @@ video {
 <div id="changeForm" style="display:none;">
   <h3>Change password (master only)</h3>
   <div class="form-row">
-    <input type="password" id="newPassword" placeholder="new password">
+    <input type="password" id="newPassword" maxlength="20" placeholder="new password">
     <button onclick="changePassword()">Change</button>
   </div>
   <p id="changeMsg"></p>
@@ -150,7 +149,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v25
+   <span>robocam</span>v26
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>

@@ -493,10 +493,12 @@ async function start(role) {
     select.style.display = 'block';
     await fillCameraSelect();
 	await startLocalStream();
+	
+	select.addEventListener('change', () => {
+      setAppState(ConnectionState.IDLE);
+    });
   }
 }
-
-
 
 // --- Kameraauswahl füllen ---
 async function fillCameraSelect() {

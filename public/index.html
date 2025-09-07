@@ -387,9 +387,13 @@ async function handleMessage(msg) {
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
         if (data.sdp.type === 'offer') {
+		  setAppState(ConnectionState.CONNECTING);
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           ws.send(JSON.stringify({ sdp: pc.localDescription }));
+		} else if (data.sdp.type === 'answer') {
+          setAppState(ConnectionState.CONNECTED);
+        }
         }
       } catch (err) {
         console.error("setRemoteDescription error:", err);

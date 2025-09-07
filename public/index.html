@@ -149,7 +149,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v30
+   <span>robocam</span>v31
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -437,6 +437,7 @@ async function start(role) {
     disableAudio();
     senderBtn.classList.add('active');
     document.getElementById("localVideo").style.display = "block"; 
+    document.getElementById("remoteVideo").style.display = "none";
     document.getElementById("remoteStatus").style.display = "none";
     document.getElementById("localStatus").style.display = "block";
   }
@@ -444,6 +445,7 @@ async function start(role) {
     setInfoMsg("start receiver");
     receiverBtn.classList.add('active');
     document.getElementById("remoteVideo").style.display = "block";
+    document.getElementById("localVideo").style.display = "none";
     document.getElementById("blackoutArea").style.display = "none";
     document.getElementById("localStatus").style.display = "none";
     document.getElementById("remoteStatus").style.display = "block";
@@ -534,6 +536,12 @@ async function fillCameraSelect() {
          opt.textContent = device.label || `Kamera ${i+1}`;
          select.appendChild(opt);
        });
+	   
+	   select.onchange = () => {
+         console.log("[DEBUG] Kamera gewechselt:", select.value);
+         startLocalStreamAndOffer();
+       };
+
 	}
 	
 	// alte Auswahl wiederherstellen, falls vorhanden
@@ -541,12 +549,10 @@ async function fillCameraSelect() {
       select.value = lastCameraId;
     }
 
-    select.onchange = () => {
-      console.log("[DEBUG] Kamera gewechselt:", select.value);
-      startLocalStreamAndOffer();
-    };
   } catch (err) {
     console.error("fillCameraSelect error:", err);
+    alert("Device in use");
+    setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(5);
   }
 }
 
@@ -564,6 +570,8 @@ async function startLocalStream() {
     await startLocalStreamAndOffer();
   } catch (err) {
     console.error("startLocalStream error:", err);
+    alert("Device in use");
+    setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(5);
   }
 }
 
@@ -624,7 +632,7 @@ function stopAll() {
   setInfoMsg("stopAll");
   setAppState(ConnectionState.IDLE);
   localOfferSent = false;
-  //myRole = null;
+  myRole = null;
   if (pc) { pc.close(); pc = null; }
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
   document.getElementById('senderBtn').disabled = false;
@@ -633,8 +641,8 @@ function stopAll() {
   document.getElementById('receiverBtn').classList.remove('active');
   document.getElementById('stopBtn').style.display = 'none';
   document.getElementById('cameraSelect').style.display = 'none';
-  document.getElementById('localVideo').srcObject = null;
-  document.getElementById('remoteVideo').srcObject = null;
+//  document.getElementById('localVideo').srcObject = null;
+//  document.getElementById('remoteVideo').srcObject = null;
   document.getElementById('blackoutArea').style.display = 'none';
 }
 

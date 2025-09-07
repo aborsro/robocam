@@ -149,7 +149,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v29
+   <span>robocam</span>v28
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -386,14 +386,15 @@ async function handleMessage(msg) {
       if (!pc) return;
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+        // hier State umschalten
         if (data.sdp.type === 'offer') {
-		  setAppState(ConnectionState.CONNECTING);
+          setAppState(ConnectionState.CONNECTING);
+
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           ws.send(JSON.stringify({ sdp: pc.localDescription }));
-		} else if (data.sdp.type === 'answer') {
+        } else if (data.sdp.type === 'answer') {
           setAppState(ConnectionState.CONNECTED);
-        }
         }
       } catch (err) {
         console.error("setRemoteDescription error:", err);
@@ -410,7 +411,6 @@ async function handleMessage(msg) {
     console.error("handleMessage error:", err);
   }
 }
-
 async function start(role) {
   document.getElementById("loginForm").style.display = "none";
   document.getElementById("changeForm").style.display = "none";
@@ -463,6 +463,19 @@ async function start(role) {
     iceServers: iceServers.length ? iceServers : [{ urls: "stun:stun.l.google.com:19302" }]
   });
 
+  pc.onnegotiationneeded = async () => {
+   console.log("[DEBUG] negotiationneeded fired");
+   try {
+     const offer = await pc.createOffer();
+     await pc.setLocalDescription(offer);
+     ws.send(JSON.stringify({ sdp: pc.localDescription }));
+     setAppState(ConnectionState.CONNECTING);
+   } catch (err) {
+     console.error("Negotiation error:", err);
+   }
+ };
+ 
+  
   // --- Transceiver nur für Receiver ---
   // --- Transceiver nur für Receiver ---
   if (role === 'receiver') {
@@ -483,7 +496,7 @@ async function start(role) {
   pc.onicecandidate = e => { if (e.candidate) ws.send(JSON.stringify({ candidate: e.candidate })); };
   pc.oniceconnectionstatechange = () => {
     console.log("[DEBUG] ICE state:", pc.iceConnectionState);
-    if (['disconnected','failed','idle','waiting'].includes(pc.iceConnectionState)) {
+    if (['disconnected','failed'].includes(pc.iceConnectionState)) {
       setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(5);
     }
     if (['connected'].includes(pc.iceConnectionState)) {
@@ -497,26 +510,24 @@ async function start(role) {
     select.style.display = 'block';
     await fillCameraSelect();
 	await startLocalStream();
-	
-	select.addEventListener('change', () => {
-      setAppState(ConnectionState.IDLE);
-    });
+	select.onchange = () => setAppState(ConnectionState.IDLE);
   }
 }
+
+
 
 // --- Kameraauswahl füllen ---
 async function fillCameraSelect() {
   try {
-    setInfoMsg("fillCameraSelect");
-    await navigator.mediaDevices.getUserMedia({ video: true });
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const videoDevices = devices.filter(d => d.kind === "videoinput");
-    const select = document.getElementById("cameraSelect");
-	
     if (!fillCameraSelectDone) {
 	   fillCameraSelectDone = true ;
+       setInfoMsg("fillCameraSelect");
+//       await navigator.mediaDevices.getUserMedia({ video: true });
+       const devices = await navigator.mediaDevices.enumerateDevices();
+       const videoDevices = devices.filter(d => d.kind === "videoinput");
+       const select = document.getElementById("cameraSelect");
        select.innerHTML = "";
-   
+    
        videoDevices.forEach((device, i) => {
          const opt = document.createElement("option");
          opt.value = device.deviceId;
@@ -524,17 +535,16 @@ async function fillCameraSelect() {
          select.appendChild(opt);
        });
 	}
-
+	
 	// alte Auswahl wiederherstellen, falls vorhanden
     if (lastCameraId) {
-       select.value = lastCameraId;
+      select.value = lastCameraId;
     }
-	
-	select.onchange = () => {
-        console.log("[DEBUG] Kamera gewechselt:", select.value);
-        startLocalStreamAndOffer();
-    };	
 
+    select.onchange = () => {
+      console.log("[DEBUG] Kamera gewechselt:", select.value);
+      startLocalStreamAndOffer();
+    };
   } catch (err) {
     console.error("fillCameraSelect error:", err);
   }
@@ -551,49 +561,47 @@ async function startLocalStream() {
     setInfoMsg("startLocalStream");
 
     if (videoDevices.length > 0) select.style.display = "block";
-       await startLocalStreamAndOffer();
+    await startLocalStreamAndOffer();
   } catch (err) {
     console.error("startLocalStream error:", err);
   }
 }
 
-
-
-
 let lastCameraId = null;
 
 async function startLocalStreamAndOffer() {
   try {
-  	  setInfoMsg("startLocalStreamAndOffer");
+    setInfoMsg("startLocalStreamAndOffer");
 
-    // Alte Streams schließen
-    if (localStream) { 
-      localStream.getTracks().forEach(track => track.stop()); 
-      localStream = null; 
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+      localStream = null;
     }
 
     const select = document.getElementById('cameraSelect');
-    const videoConstraints = select.value ? { deviceId: { exact: select.value } } : true;
+    const videoConstraints = select.value
+      ? { deviceId: { exact: select.value } }
+      : true;
 
-	lastCameraId = select.value;  // Auswahl merken
-	
-    localStream = await navigator.mediaDevices.getUserMedia({ 
-      video: videoConstraints, 
-      audio: audioSetting 
+    localStream = await navigator.mediaDevices.getUserMedia({
+      video: videoConstraints,
+      audio: audioSetting
     });
 
-    // Tracks anhängen
-    localStream.getTracks().forEach(track => { if (pc) pc.addTrack(track, localStream); });
-    localVideo.srcObject = localStream;
+    const senders = pc.getSenders();
+    localStream.getTracks().forEach(track => {
+      const sender = senders.find(s => s.track && s.track.kind === track.kind);
+      if (sender) {
+        console.log("[DEBUG] replaceTrack", track.kind);
+        sender.replaceTrack(track);
+      } else {
+        console.log("[DEBUG] addTrack", track.kind);
+        pc.addTrack(track, localStream);
+      }
+    });
 
-    // --- NEUES Offer erzwingen ---
-    if (pc) {
-      console.log("[DEBUG] Creating fresh offer with all tracks");
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      ws.send(JSON.stringify({ sdp: pc.localDescription }));
-      localOfferSent = true;
-    }
+    localVideo.srcObject = localStream;
+    // kein createOffer() mehr nötig ? das macht onnegotiationneeded
   } catch (e) {
     console.error("startLocalStreamAndOffer error:", e);
     alert("Cam/Mic access not granted or available");

@@ -508,7 +508,6 @@ async function fillCameraSelect() {
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter(d => d.kind === "videoinput");
     const select = document.getElementById("cameraSelect");
-    select.onchange = setAppState(ConnectionState.IDLE);
 	
     if (!fillCameraSelectDone) {
 	   fillCameraSelectDone = true ;
@@ -521,6 +520,16 @@ async function fillCameraSelect() {
          select.appendChild(opt);
        });
 	}
+
+	// alte Auswahl wiederherstellen, falls vorhanden
+    if (lastCameraId) {
+       select.value = lastCameraId;
+    }
+	
+	select.onchange = () => {
+        console.log("[DEBUG] Kamera gewechselt:", select.value);
+        startLocalStreamAndOffer();
+    };	
 
   } catch (err) {
     console.error("fillCameraSelect error:", err);
@@ -538,12 +547,16 @@ async function startLocalStream() {
     setInfoMsg("startLocalStream");
 
     if (videoDevices.length > 0) select.style.display = "block";
-    await startLocalStreamAndOffer();
+       await startLocalStreamAndOffer();
   } catch (err) {
     console.error("startLocalStream error:", err);
   }
 }
 
+
+
+
+let lastCameraId = null;
 
 async function startLocalStreamAndOffer() {
   try {
@@ -558,6 +571,8 @@ async function startLocalStreamAndOffer() {
     const select = document.getElementById('cameraSelect');
     const videoConstraints = select.value ? { deviceId: { exact: select.value } } : true;
 
+	lastCameraId = select.value;  // Auswahl merken
+	
     localStream = await navigator.mediaDevices.getUserMedia({ 
       video: videoConstraints, 
       audio: audioSetting 

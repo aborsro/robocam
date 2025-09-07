@@ -149,7 +149,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v28
+   <span>robocam</span>v29
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -495,6 +495,7 @@ async function start(role) {
 	await startLocalStream();
 	
 	select.addEventListener('change', () => {
+	  fillCameraSelectDone = false ;
       setAppState(ConnectionState.IDLE);
     });
   }
@@ -508,11 +509,11 @@ async function fillCameraSelect() {
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter(d => d.kind === "videoinput");
     const select = document.getElementById("cameraSelect");
-    select.innerHTML = "";
     select.onchange = setAppState(ConnectionState.IDLE);
 	
     if (!fillCameraSelectDone) {
 	   fillCameraSelectDone = true ;
+       select.innerHTML = "";
    
        videoDevices.forEach((device, i) => {
          const opt = document.createElement("option");

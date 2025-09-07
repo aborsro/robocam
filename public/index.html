@@ -479,7 +479,7 @@ async function start(role) {
   pc.onicecandidate = e => { if (e.candidate) ws.send(JSON.stringify({ candidate: e.candidate })); };
   pc.oniceconnectionstatechange = () => {
     console.log("[DEBUG] ICE state:", pc.iceConnectionState);
-    if (['disconnected','failed','idle'].includes(pc.iceConnectionState)) {
+    if (['disconnected','failed','idle','waiting'].includes(pc.iceConnectionState)) {
       setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(5);
     }
     if (['connected'].includes(pc.iceConnectionState)) {

@@ -149,7 +149,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v26
+   <span>robocam</span>v28
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -302,6 +302,7 @@ let remoteOut = true;
 let localOut = true;
 let myRole = null;
 let audioSetting = true;
+let fillCameraSelectDone = false;
 
 const reconnectInterval = 3000;
 const ROOM_ID = 'id1';
@@ -429,7 +430,7 @@ async function start(role) {
 
   if (role === 'sender') { 
     setInfoMsg("start sender");
-	toggleAudio();
+    disableAudio();
     senderBtn.classList.add('active');
     document.getElementById("localVideo").style.display = "block"; 
     document.getElementById("remoteStatus").style.display = "none";
@@ -458,6 +459,7 @@ async function start(role) {
     iceServers: iceServers.length ? iceServers : [{ urls: "stun:stun.l.google.com:19302" }]
   });
 
+  // --- Transceiver nur für Receiver ---
   // --- Transceiver nur für Receiver ---
   if (role === 'receiver') {
     console.log("[DEBUG] Receiver: adding recvonly transceivers");
@@ -490,38 +492,54 @@ async function start(role) {
     const select = document.getElementById('cameraSelect');
     select.style.display = 'block';
     await fillCameraSelect();
+	await startLocalStream();
   }
 }
+
 
 
 // --- Kameraauswahl füllen ---
 async function fillCameraSelect() {
   try {
-    setInfoMsg("fillCameraSelect");
-    await navigator.mediaDevices.getUserMedia({ video: true });
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const videoDevices = devices.filter(d => d.kind === "videoinput");
-    const select = document.getElementById("cameraSelect");
-    select.innerHTML = "";
+    if (!fillCameraSelectDone) {
+	   fillCameraSelectDone = true ;
+       setInfoMsg("fillCameraSelect");
+       await navigator.mediaDevices.getUserMedia({ video: true });
+       const devices = await navigator.mediaDevices.enumerateDevices();
+       const videoDevices = devices.filter(d => d.kind === "videoinput");
+       const select = document.getElementById("cameraSelect");
+       select.innerHTML = "";
+    
+       videoDevices.forEach((device, i) => {
+         const opt = document.createElement("option");
+         opt.value = device.deviceId;
+         opt.textContent = device.label || `Kamera ${i+1}`;
+         select.appendChild(opt);
+       });
+	}
 
-    videoDevices.forEach((device, i) => {
-      const opt = document.createElement("option");
-      opt.value = device.deviceId;
-      opt.textContent = device.label || `Kamera ${i+1}`;
-      select.appendChild(opt);
-    });
-
-    if (videoDevices.length > 0) select.style.display = "block";
-
-    if (videoDevices.length === 1) { 
-      await startLocalStreamAndOffer();
-    } else {
-      select.onchange = async () => { await startLocalStreamAndOffer(); };
-    }
   } catch (err) {
     console.error("fillCameraSelect error:", err);
   }
 }
+
+
+// --- Kameraauswahl füllen ---
+async function startLocalStream() {
+  try {
+    await navigator.mediaDevices.getUserMedia({ video: true });
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = devices.filter(d => d.kind === "videoinput");
+    const select = document.getElementById("cameraSelect");
+    setInfoMsg("startLocalStream");
+
+    if (videoDevices.length > 0) select.style.display = "block";
+    await startLocalStreamAndOffer();
+  } catch (err) {
+    console.error("startLocalStream error:", err);
+  }
+}
+
 
 async function startLocalStreamAndOffer() {
   try {
@@ -559,6 +577,11 @@ async function startLocalStreamAndOffer() {
   }
 }
 
+function disableAudio() {
+  audioSetting = false;
+  if (localStream) { localStream.getAudioTracks().forEach(t => t.enabled = false); }
+  document.getElementById('audioBtn').textContent = 'audio on';
+}
 
 function toggleAudio() {
   audioSetting = !audioSetting;

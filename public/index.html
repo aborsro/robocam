@@ -501,15 +501,17 @@ async function start(role) {
 // --- Kameraauswahl füllen ---
 async function fillCameraSelect() {
   try {
+    setInfoMsg("fillCameraSelect");
+    await navigator.mediaDevices.getUserMedia({ video: true });
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = devices.filter(d => d.kind === "videoinput");
+    const select = document.getElementById("cameraSelect");
+    select.innerHTML = "";
+    select.onchange = setAppState(ConnectionState.IDLE);
+	
     if (!fillCameraSelectDone) {
 	   fillCameraSelectDone = true ;
-       setInfoMsg("fillCameraSelect");
-       await navigator.mediaDevices.getUserMedia({ video: true });
-       const devices = await navigator.mediaDevices.enumerateDevices();
-       const videoDevices = devices.filter(d => d.kind === "videoinput");
-       const select = document.getElementById("cameraSelect");
-       select.innerHTML = "";
-    
+   
        videoDevices.forEach((device, i) => {
          const opt = document.createElement("option");
          opt.value = device.deviceId;

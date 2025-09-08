@@ -149,7 +149,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v32
+   <span>robocam</span>v33
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -633,35 +633,35 @@ async function startLocalStreamAndOffer() {
   try {
     setInfoMsg("startLocalStreamAndOffer");
 
+    // Alte Video-Sender entfernen
+    if (pc) {
+      pc.getSenders().forEach(sender => {
+        if (sender.track && sender.track.kind === "video") {
+          pc.removeTrack(sender);
+        }
+      });
+    }
+
+    // Alte Streams stoppen
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
       localStream = null;
     }
 
     const select = document.getElementById('cameraSelect');
-    const videoConstraints = select.value
-      ? { deviceId: { exact: select.value } }
-      : true;
+    const videoConstraints = select.value ? { deviceId: { exact: select.value } } : true;
 
+    // Neue Kamera starten
     localStream = await navigator.mediaDevices.getUserMedia({
       video: videoConstraints,
       audio: audioSetting
     });
-
-    const senders = pc.getSenders();
     localStream.getTracks().forEach(track => {
-      const sender = senders.find(s => s.track && s.track.kind === track.kind);
-      if (sender) {
-        console.log("[DEBUG] replaceTrack", track.kind);
-        sender.replaceTrack(track);
-      } else {
-        console.log("[DEBUG] addTrack", track.kind);
-        pc.addTrack(track, localStream);
-      }
+      if (pc) pc.addTrack(track, localStream);
     });
-
     localVideo.srcObject = localStream;
-    // kein createOffer() mehr nötig ? das macht onnegotiationneeded
+
+    // Kein manuelles Offer mehr ? pc.onnegotiationneeded übernimmt
   } catch (e) {
     console.error("startLocalStreamAndOffer error:", e);
     alert("Cam/Mic access not granted or available");

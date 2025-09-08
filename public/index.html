@@ -149,7 +149,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v33
+   <span>robocam</span>v34
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -633,40 +633,56 @@ async function startLocalStreamAndOffer() {
   try {
     setInfoMsg("startLocalStreamAndOffer");
 
-    // Alte Video-Sender entfernen
-    if (pc) {
-      pc.getSenders().forEach(sender => {
-        if (sender.track && sender.track.kind === "video") {
-          pc.removeTrack(sender);
-        }
-      });
-    }
-
-    // Alte Streams stoppen
-    if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
-      localStream = null;
-    }
-
     const select = document.getElementById('cameraSelect');
     const videoConstraints = select.value ? { deviceId: { exact: select.value } } : true;
 
-    // Neue Kamera starten
-    localStream = await navigator.mediaDevices.getUserMedia({
+    // --- Neue Kamera streamen ---
+    const newStream = await navigator.mediaDevices.getUserMedia({
       video: videoConstraints,
       audio: audioSetting
     });
-    localStream.getTracks().forEach(track => {
-      if (pc) pc.addTrack(track, localStream);
-    });
-    localVideo.srcObject = localStream;
 
-    // Kein manuelles Offer mehr ? pc.onnegotiationneeded übernimmt
-  } catch (e) {
-    console.error("startLocalStreamAndOffer error:", e);
+    // --- VideoTrack ersetzen ---
+    if (pc) {
+      const videoSender = pc.getSenders().find(s => s.track && s.track.kind === "video");
+      if (videoSender) {
+        const newVideoTrack = newStream.getVideoTracks()[0];
+        await videoSender.replaceTrack(newVideoTrack);
+      } else {
+        // Kein Sender vorhanden ? Track hinzufügen, löst onnegotiationneeded aus
+        newStream.getTracks().forEach(track => pc.addTrack(track, newStream));
+      }
+    }
+
+    // --- Lokales Video setzen ---
+    localVideo.srcObject = newStream;
+    try { await localVideo.play(); } catch (err) { console.warn("localVideo play error:", err); }
+
+    // --- AudioTrack ersetzen ---
+    if (audioSetting) {
+      const audioSender = pc.getSenders().find(s => s.track && s.track.kind === "audio");
+      if (audioSender) {
+        const newAudioTrack = newStream.getAudioTracks()[0];
+        if (newAudioTrack) await audioSender.replaceTrack(newAudioTrack);
+      } else {
+        newStream.getAudioTracks().forEach(track => pc.addTrack(track, newStream));
+      }
+    }
+
+    // --- Alte Tracks stoppen ---
+    if (localStream) {
+      localStream.getTracks().forEach(t => t.stop());
+    }
+    localStream = newStream;
+
+    setInfoMsg("Camera switched successfully");
+
+  } catch (err) {
+    console.error("startLocalStreamAndOffer error:", err);
     alert("Cam/Mic access not granted or available");
   }
 }
+
 
 function disableAudio() {
   audioSetting = false;

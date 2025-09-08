@@ -149,7 +149,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v37
+   <span>robocam</span>v40
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -188,6 +188,7 @@ let ws;
 let role; // "sender" oder "receiver"
 let full = false;
 let idleRestartTimer = null;
+let isNegotiating = false;
 
     // Button-Handler für volle Breite
     toggleBtn.onclick = () => {
@@ -515,17 +516,23 @@ async function start(role) {
   
   pc = new RTCPeerConnection({ iceServers: iceServers.length ? iceServers : [{ urls: "stun:stun.l.google.com:19302" }] });
 
-  // Direkt hier
-  pc.onnegotiationneeded = async () => {
-    try {
-      console.log("[DEBUG] Negotiation needed – creating new offer");
-      const offer = await pc.createOffer({ offerToReceiveVideo: true });
-      await pc.setLocalDescription(offer);
-      ws.send(JSON.stringify({ sdp: pc.localDescription }));
-    } catch (err) {
-      console.error("onnegotiationneeded error:", err);
-    }
-  };
+pc.onnegotiationneeded = async () => {
+  if (isNegotiating) {
+    console.log("[DEBUG] Negotiation already in progress, skip.");
+    return;
+  }
+  try {
+    isNegotiating = true;
+    console.log("[DEBUG] Negotiation needed – creating new offer");
+    const offer = await pc.createOffer({ offerToReceiveVideo: true });
+    await pc.setLocalDescription(offer);
+    ws.send(JSON.stringify({ sdp: pc.localDescription }));
+  } catch (err) {
+    console.error("onnegotiationneeded error:", err);
+  } finally {
+    isNegotiating = false;
+  }
+};
 
   
   // --- Transceiver nur für Receiver ---
@@ -672,6 +679,16 @@ async function startLocalStreamAndOffer() {
     localStream = newStream;
 
     setInfoMsg("Camera/Audio updated successfully");
+	
+// --- nach Kamerawechsel nur Track ersetzen ---
+setInfoMsg("Camera/Audio updated successfully");
+
+// Trick: Negotiation anstoßen, wenn nötig
+if (pc) {
+  console.log("[DEBUG] Forcing negotiation after camera change");
+  pc.dispatchEvent(new Event("negotiationneeded"));
+}
+	
 
   } catch (err) {
     console.error("startLocalStreamAndOffer error:", err);
@@ -700,7 +717,7 @@ function stopAll() {
   if (myRole === "sender") {
     ws.send(JSON.stringify({ type: "senderStatus", active: false, roomId: ROOM_ID }));
   }
-  myRole = null;
+//  myRole = null;
   if (pc) { pc.close(); pc = null; }
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
   document.getElementById('senderBtn').disabled = false;

@@ -149,7 +149,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v35
+   <span>robocam</span>v37
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -513,24 +513,21 @@ async function start(role) {
     console.error("ICE Server fetch failed:", e);
   }
   
-  pc = new RTCPeerConnection({
-    iceServers: iceServers.length ? iceServers : [{ urls: "stun:stun.l.google.com:19302" }]
-  });
+  pc = new RTCPeerConnection({ iceServers: iceServers.length ? iceServers : [{ urls: "stun:stun.l.google.com:19302" }] });
 
+  // Direkt hier
   pc.onnegotiationneeded = async () => {
-   console.log("[DEBUG] negotiationneeded fired");
-   try {
-     const offer = await pc.createOffer();
-     await pc.setLocalDescription(offer);
-     ws.send(JSON.stringify({ sdp: pc.localDescription }));
-     setAppState(ConnectionState.CONNECTING);
-   } catch (err) {
-     console.error("Negotiation error:", err);
-   }
- };
- 
+    try {
+      console.log("[DEBUG] Negotiation needed – creating new offer");
+      const offer = await pc.createOffer({ offerToReceiveVideo: true });
+      await pc.setLocalDescription(offer);
+      ws.send(JSON.stringify({ sdp: pc.localDescription }));
+    } catch (err) {
+      console.error("onnegotiationneeded error:", err);
+    }
+  };
+
   
-  // --- Transceiver nur für Receiver ---
   // --- Transceiver nur für Receiver ---
   if (role === 'receiver') {
     console.log("[DEBUG] Receiver: adding recvonly transceivers");
@@ -681,19 +678,6 @@ async function startLocalStreamAndOffer() {
     alert("Cam/Mic access not granted or available");
   }
 }
-
-// --- pc.onnegotiationneeded ---
-pc.onnegotiationneeded = async () => {
-  try {
-    console.log("[DEBUG] Negotiation needed – creating new offer");
-    const offer = await pc.createOffer({ offerToReceiveVideo: true });
-    await pc.setLocalDescription(offer);
-    ws.send(JSON.stringify({ sdp: pc.localDescription }));
-  } catch (err) {
-    console.error("onnegotiationneeded error:", err);
-  }
-};
-
 
 
 function disableAudio() {

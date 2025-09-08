@@ -149,7 +149,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v31
+   <span>robocam</span>v32
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -327,6 +327,7 @@ function connectWebSocket() {
   };
 
   ws.onmessage = handleMessage;
+
   ws.onerror = e => console.error("[DEBUG] WebSocket Error:", e);
 
   ws.onclose = () => {
@@ -376,41 +377,89 @@ function blackoutScreen() {
   document.getElementById('blackoutBtn').textContent = blackOut ? 'display' : 'blackout';
 }
 
+// --- Nachrichten vom Server verarbeiten ---
 async function handleMessage(msg) {
   try {
-    const text = msg.data instanceof Blob ? await msg.data.text() : msg.data;
-    let data;
-    try { data = JSON.parse(text); } catch { return; }
+    // --- Blob oder String in Text umwandeln ---
+    let text;
+    if (msg.data instanceof Blob) {
+      text = await msg.data.text();
+    } else {
+      text = msg.data;
+    }
 
+    // --- JSON parsen ---
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (err) {
+      console.error("JSON parse error:", err, text);
+      return;
+    }
+
+    if (data.type === "senderStatus") {
+      const senderBtn = document.getElementById("senderBtn");
+      if (data.active) {
+        senderBtn.disabled = true;
+        senderBtn.textContent = "sender (locked)";
+      } else {
+        senderBtn.disabled = false;
+        senderBtn.textContent = "send";
+      }
+    }
+  
+    if (data.type === "error") {
+      alert(data.message);
+      stopAll();
+	  return;
+    }
+	
+    // --- Statusmeldungen vom Server ---
+    if (data.type === "senderStatus") {
+      const senderBtn = document.getElementById("senderBtn");
+      if (data.active) {
+        senderBtn.disabled = true;
+        senderBtn.textContent = "sender (locked)";
+      } else {
+        senderBtn.disabled = false;
+        senderBtn.textContent = "send";
+      }
+      return; // keine weitere Verarbeitung
+    }
+
+    // --- WebRTC Signalisierung ---
     if (data.sdp) {
       if (!pc) return;
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-        // hier State umschalten
         if (data.sdp.type === 'offer') {
-          setAppState(ConnectionState.CONNECTING);
-
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           ws.send(JSON.stringify({ sdp: pc.localDescription }));
-        } else if (data.sdp.type === 'answer') {
-          setAppState(ConnectionState.CONNECTED);
         }
       } catch (err) {
         console.error("setRemoteDescription error:", err);
       }
-    } else if (data.candidate) {
+      return;
+    }
+
+    if (data.candidate) {
       if (!pc) return;
       try {
         await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
       } catch (err) {
         console.error("addIceCandidate error:", err);
       }
+      return;
     }
+
   } catch (err) {
     console.error("handleMessage error:", err);
   }
 }
+
+
+
 async function start(role) {
   document.getElementById("loginForm").style.display = "none";
   document.getElementById("changeForm").style.display = "none";
@@ -434,6 +483,8 @@ async function start(role) {
 
   if (role === 'sender') { 
     setInfoMsg("start sender");
+	ws.send(JSON.stringify({ type: "senderStatus", active: true, roomId: ROOM_ID }));
+    ws.send(JSON.stringify({ type: "register", role: "sender", roomId: ROOM_ID }));
     disableAudio();
     senderBtn.classList.add('active');
     document.getElementById("localVideo").style.display = "block"; 
@@ -443,6 +494,7 @@ async function start(role) {
   }
   if (role === 'receiver') {
     setInfoMsg("start receiver");
+//	ws.send(JSON.stringify({ type: "senderStatus", active: false, roomId: ROOM_ID }));
     receiverBtn.classList.add('active');
     document.getElementById("remoteVideo").style.display = "block";
     document.getElementById("localVideo").style.display = "none";
@@ -632,6 +684,10 @@ function stopAll() {
   setInfoMsg("stopAll");
   setAppState(ConnectionState.IDLE);
   localOfferSent = false;
+  
+  if (myRole === "sender") {
+    ws.send(JSON.stringify({ type: "senderStatus", active: false, roomId: ROOM_ID }));
+  }
   myRole = null;
   if (pc) { pc.close(); pc = null; }
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }

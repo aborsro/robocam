@@ -149,7 +149,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v34
+   <span>robocam</span>v35
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -589,11 +589,11 @@ async function fillCameraSelect() {
          select.appendChild(opt);
        });
 	   
-	   select.onchange = () => {
-         console.log("[DEBUG] Kamera gewechselt:", select.value);
-         startLocalStreamAndOffer();
+       select.onchange = async () => {
+         if (!pc) return;  // PeerConnection existiert noch nicht
+         setInfoMsg("Switching camera...");
+         await startLocalStreamAndOffer();
        };
-
 	}
 	
 	// alte Auswahl wiederherstellen, falls vorhanden
@@ -636,21 +636,31 @@ async function startLocalStreamAndOffer() {
     const select = document.getElementById('cameraSelect');
     const videoConstraints = select.value ? { deviceId: { exact: select.value } } : true;
 
-    // --- Neue Kamera streamen ---
+    // --- Neuen Stream holen ---
     const newStream = await navigator.mediaDevices.getUserMedia({
       video: videoConstraints,
       audio: audioSetting
     });
 
-    // --- VideoTrack ersetzen ---
+    // --- VideoTrack ersetzen oder hinzufügen ---
     if (pc) {
       const videoSender = pc.getSenders().find(s => s.track && s.track.kind === "video");
+      const newVideoTrack = newStream.getVideoTracks()[0];
+
       if (videoSender) {
-        const newVideoTrack = newStream.getVideoTracks()[0];
         await videoSender.replaceTrack(newVideoTrack);
       } else {
-        // Kein Sender vorhanden ? Track hinzufügen, löst onnegotiationneeded aus
-        newStream.getTracks().forEach(track => pc.addTrack(track, newStream));
+        // Kein Sender vorhanden ? Track hinzufügen (löst onnegotiationneeded aus)
+        pc.addTrack(newVideoTrack, newStream);
+      }
+
+      // --- AudioTrack ersetzen oder hinzufügen ---
+      const audioSender = pc.getSenders().find(s => s.track && s.track.kind === "audio");
+      const newAudioTrack = newStream.getAudioTracks()[0];
+      if (audioSender && newAudioTrack) {
+        await audioSender.replaceTrack(newAudioTrack);
+      } else if (newAudioTrack) {
+        pc.addTrack(newAudioTrack, newStream);
       }
     }
 
@@ -658,30 +668,32 @@ async function startLocalStreamAndOffer() {
     localVideo.srcObject = newStream;
     try { await localVideo.play(); } catch (err) { console.warn("localVideo play error:", err); }
 
-    // --- AudioTrack ersetzen ---
-    if (audioSetting) {
-      const audioSender = pc.getSenders().find(s => s.track && s.track.kind === "audio");
-      if (audioSender) {
-        const newAudioTrack = newStream.getAudioTracks()[0];
-        if (newAudioTrack) await audioSender.replaceTrack(newAudioTrack);
-      } else {
-        newStream.getAudioTracks().forEach(track => pc.addTrack(track, newStream));
-      }
-    }
-
-    // --- Alte Tracks stoppen ---
+    // --- Alten Stream stoppen ---
     if (localStream) {
-      localStream.getTracks().forEach(t => t.stop());
+      localStream.getTracks().forEach(track => track.stop());
     }
     localStream = newStream;
 
-    setInfoMsg("Camera switched successfully");
+    setInfoMsg("Camera/Audio updated successfully");
 
   } catch (err) {
     console.error("startLocalStreamAndOffer error:", err);
     alert("Cam/Mic access not granted or available");
   }
 }
+
+// --- pc.onnegotiationneeded ---
+pc.onnegotiationneeded = async () => {
+  try {
+    console.log("[DEBUG] Negotiation needed – creating new offer");
+    const offer = await pc.createOffer({ offerToReceiveVideo: true });
+    await pc.setLocalDescription(offer);
+    ws.send(JSON.stringify({ sdp: pc.localDescription }));
+  } catch (err) {
+    console.error("onnegotiationneeded error:", err);
+  }
+};
+
 
 
 function disableAudio() {

@@ -1,21 +1,36 @@
-// server.js
-const express = require("express");
-const http = require("http");
-const WebSocket = require("ws");
-const bodyParser = require("body-parser");
+const express = require('express');
+const http = require('http');
+const WebSocket = require('ws');
+const bodyParser = require('body-parser');
+const fs = require('fs');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// --- Passwortschutz ---
-let userPassword = "rr";         // Startpasswort
-const MASTER = "zork";           // Masterpasswort
+// --- Master-Passwort ---
+const MASTER = "zork";   // nur hier sichtbar!
+
+// --- User-Passwort persistent speichern ---
+let userPassword = "rr"; // Fallback
+const pwFile = "password.json";
+
+// Passwort aus Datei laden (falls vorhanden)
+try {
+  const data = fs.readFileSync(pwFile, "utf8");
+  const parsed = JSON.parse(data);
+  if (parsed.userPassword) {
+    userPassword = parsed.userPassword;
+    console.log("Loaded user password:", userPassword);
+  }
+} catch (e) {
+  console.log("No password.json found, using default:", userPassword);
+}
 
 // Body Parser für JSON
 app.use(bodyParser.json());
 
-// Statische Dateien ausliefern (z. B. deine index.html in /public)
-app.use(express.static("public"));
+// Statische Dateien ausliefern (z.B. index.html in /public)
+app.use(express.static('public'));
 
 // --- Login-Route ---
 app.post("/login", (req, res) => {
@@ -29,37 +44,37 @@ app.post("/login", (req, res) => {
   }
 });
 
-// --- Passwort ändern (nur Master) ---
+// --- Passwort ändern (nur mit Masterpasswort) ---
 app.post("/change-password", (req, res) => {
   const { master, newPassword } = req.body;
   if (master === MASTER) {
     userPassword = newPassword;
-    console.log("Neues Passwort:", userPassword);
-    res.json({ success: true, message: `password changed (${userPassword})` });
+
+    // --- Speichern in JSON-Datei ---
+    fs.writeFileSync(pwFile, JSON.stringify({ userPassword }, null, 2));
+
+    console.log("Password changed:", userPassword);
+    res.json({ success: true, message: "password changed (" + userPassword + ")" });
   } else {
     res.json({ success: false, message: "just use master password" });
   }
 });
 
-// --- HTTP + WebSocket ---
+// --- WebSocket Setup ---
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 let currentSender = null;
 
-wss.on("connection", (ws) => {
-  ws.on("message", (message) => {
+wss.on("connection", ws => {
+  ws.on("message", message => {
     let data;
-    try {
-      data = JSON.parse(message);
-    } catch {
-      return;
-    }
+    try { data = JSON.parse(message); } catch { return; }
 
-    // --- Registrierung ---
     if (data.type === "register") {
       if (data.role === "sender") {
         if (currentSender && currentSender !== ws) {
+          // Ablehnen
           ws.send(JSON.stringify({ type: "error", message: "Sender already active" }));
           ws.send(JSON.stringify({ type: "senderStatus", active: true }));
           return;
@@ -69,7 +84,6 @@ wss.on("connection", (ws) => {
       }
     }
 
-    // --- Sender freigeben ---
     if (data.type === "senderStatus" && data.active === false) {
       if (ws === currentSender) {
         currentSender = null;
@@ -77,9 +91,9 @@ wss.on("connection", (ws) => {
       }
     }
 
-    // --- Weiterleitung SDP/ICE ---
+    // Weiterleitung von SDP/ICE
     if (data.sdp || data.candidate) {
-      wss.clients.forEach((client) => {
+      wss.clients.forEach(client => {
         if (client !== ws && client.readyState === WebSocket.OPEN) {
           client.send(message);
         }
@@ -97,11 +111,12 @@ wss.on("connection", (ws) => {
 
 function broadcast(obj) {
   const msg = JSON.stringify(obj);
-  wss.clients.forEach((client) => {
+  wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) client.send(msg);
   });
 }
 
+// --- Server starten ---
 server.listen(port, () => {
-  console.log(`Server läuft auf http://localhost:${port}`);
+  console.log(`Server running on http://localhost:${port}`);
 });

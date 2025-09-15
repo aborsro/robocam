@@ -149,7 +149,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v42
+   <span>robocam</span>v43
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -255,7 +255,7 @@ async function changePassword() {
 }
 
 // --- robocam Code ---
-console.log("[DEBUG] Initialising ROBOCAM App");
+setInfoMsg("[DEBUG] Initialising ROBOCAM App");
 
 const ConnectionState = {
   IDLE: 'idle', WAITING: 'waiting', READY: 'ready',
@@ -265,13 +265,14 @@ let appState = ConnectionState.IDLE;
 
 
 function setInfoMsg(msg) {
+  console.log(msg);
   const infoMsg = document.getElementById('infoMsg');
   if (infoMsg) infoMsg.value = `${msg}`;
 }
 
 function setAppState(state) {
   appState = state;
-  console.log(`[STATE] ${state}`);
+  setInfoMsg(`[STATE] ${state}`);
 //  document.getElementById('statusDisplay').textContent = `Status: ${state}`;
 
   // Show status inside remote video overlay
@@ -287,7 +288,7 @@ function setAppState(state) {
     clearTimeout(idleRestartTimer);
     idleRestartTimer = setTimeout(() => {
       if ((appState === ConnectionState.IDLE)||(appState === ConnectionState.WAITING)) {
-        console.log("[DEBUG] Sender idle/waitung for 5s – restarting...");
+        setInfoMsg("[DEBUG] Sender idle/waitung for 5s – restarting...");
         start("sender");
       }
     }, 5000);
@@ -321,7 +322,7 @@ function connectWebSocket() {
   ws = new WebSocket(`${wsProtocol}://${location.host}/ws`);
 
   ws.onopen = () => {
-    console.log("[DEBUG] WebSocket connected");
+    setInfoMsg("[DEBUG] WebSocket connected");
     if (myRole)
       ws.send(JSON.stringify({ type: "register", role: myRole, roomId: ROOM_ID }));
     setAppState(ConnectionState.WAITING);
@@ -356,7 +357,7 @@ async function fetchIceServers() {
         if (xhr.status === 200) {
           try {
             const res = JSON.parse(xhr.responseText);
-            console.log("Xirsys ICE Servers:", res.v.iceServers);
+            setInfoMsg("Xirsys ICE Servers:", res.v.iceServers);
             resolve(res.v.iceServers);
           } catch (err) { reject(err); }
         } else {
@@ -438,24 +439,21 @@ async function handleMessage(msg) {
     if (data.sdp) {
       if (!pc) return;
       try {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-        if (data.sdp.type === 'offer') {
+        if (data.sdp.type === "offer") {
+          setInfoMsg("received offer");
+          await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           ws.send(JSON.stringify({ sdp: pc.localDescription }));
-
-		
-		} else if (data.sdp.type === "answer") {
-          // Wir sind der Offerer
-          console.log("Received answer");
-      
+    
+        } else if (data.sdp.type === "answer") {
+          setInfoMsg("received answer");
           if (pc.signalingState === "have-local-offer") {
-            await pc.setRemoteDescription(data.sdp);
+            await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
           } else {
-            console.warn("Ignoring answer, wrong state:", pc.signalingState);
+            console.warn("ignoring answer, wrong state:", pc.signalingState);
           }
         }
-	
       } catch (err) {
         console.error("setRemoteDescription error:", err);
       }
@@ -477,13 +475,26 @@ async function handleMessage(msg) {
   }
 }
 
+let playPromise;
+
+function safePlay(videoEl) {
+  if (playPromise) {
+    playPromise.catch(() => {}).finally(() => {}); // ignore previous play error
+  }
+  playPromise = videoEl.play();
+  playPromise.catch(err => {
+    if (err.name !== "AbortError") {
+      console.warn("Play error:", err);
+    }
+  });
+}
 
 
 async function start(role) {
   document.getElementById("loginForm").style.display = "none";
   document.getElementById("changeForm").style.display = "none";
 
-  console.log(`[DEBUG] Starte als ${role}`);
+  setInfoMsg(`[DEBUG] Starte als ${role}`);
   myRole = role;
   if (ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'register', role: myRole, roomId: ROOM_ID }));
@@ -535,12 +546,12 @@ async function start(role) {
 
 pc.onnegotiationneeded = async () => {
   if (isNegotiating) {
-    console.log("[DEBUG] Negotiation already in progress, skip.");
+    setInfoMsg("[DEBUG] Negotiation already in progress, skip.");
     return;
   }
   try {
     isNegotiating = true;
-    console.log("[DEBUG] Negotiation needed – creating new offer");
+    setInfoMsg("[DEBUG] Negotiation needed – creating new offer");
     const offer = await pc.createOffer({ offerToReceiveVideo: true });
     await pc.setLocalDescription(offer);
     ws.send(JSON.stringify({ sdp: pc.localDescription }));
@@ -554,41 +565,32 @@ pc.onnegotiationneeded = async () => {
   
   // --- Transceiver nur für Receiver ---
   if (role === 'receiver') {
-    console.log("[DEBUG] Receiver: adding recvonly transceivers");
+    setInfoMsg("[DEBUG] Receiver: adding recvonly transceivers");
     pc.addTransceiver("audio", { direction: "recvonly" });
     pc.addTransceiver("video", { direction: "recvonly" });
   }
   
   // --- Transceiver nur für Sender ---
   if (role === 'sender') {
-    console.log("[DEBUG] Sender: adding sendrecv transceivers");
+    setInfoMsg("[DEBUG] Sender: adding sendrecv transceivers");
     pc.addTransceiver("audio", { direction: "sendrecv" });
     pc.addTransceiver("video", { direction: "sendrecv" });
   }
 
   // --- Remote-Stream empfangen ---
   pc.ontrack = e => {
-    console.log("[DEBUG] Track received:", e.streams);
+    setInfoMsg("[DEBUG] track received:", e.streams);
     if (remoteVideo.srcObject !== e.streams[0]) {
       remoteVideo.srcObject = e.streams[0];
     }
-    remoteVideo.play().catch(err => console.warn("Play error:", err));
-    setAppState(ConnectionState.CONNECTED);
+    safePlay(remoteVideo);
   };
   
-  
-  
-//  pc.ontrack = e => {
-//    console.log("[DEBUG] Track received:", e.streams);
-//    const remoteVideo = document.getElementById('remoteVideo');
-//    remoteVideo.srcObject = e.streams[0];
-//    remoteVideo.play().catch(err => console.error("Play error:", err));
-//    setAppState(ConnectionState.CONNECTED);
-//  };
+ 
 
   pc.onicecandidate = e => { if (e.candidate) ws.send(JSON.stringify({ candidate: e.candidate })); };
   pc.oniceconnectionstatechange = () => {
-    console.log("[DEBUG] ICE state:", pc.iceConnectionState);
+    setInfoMsg("[DEBUG] ICE state:", pc.iceConnectionState);
     if (['disconnected','failed'].includes(pc.iceConnectionState)) {
       setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(5);
     }
@@ -630,7 +632,7 @@ async function fillCameraSelect() {
 	   
        select.onchange = async () => {
          if (!pc) return;  // PeerConnection existiert noch nicht
-         setInfoMsg("Switching camera...");
+         setInfoMsg("switching camera...");
          await startLocalStreamAndOffer();
        };
 	}
@@ -720,7 +722,7 @@ setInfoMsg("Camera/Audio updated successfully");
 
 // Trick: Negotiation anstoßen, wenn nötig
 if (pc) {
-  console.log("[DEBUG] Forcing negotiation after camera change");
+  setInfoMsg("[DEBUG] Forcing negotiation after camera change");
   pc.dispatchEvent(new Event("negotiationneeded"));
 }
 	
@@ -765,7 +767,7 @@ function attemptReconnectWithDelay(seconds) {
   setInfoMsg("try reconnect");
   setTimeout(() => {
     if (!pc || pc.iceConnectionState === 'disconnected') {
-      console.log("[DEBUG] try to reconnect");
+      setInfoMsg("[DEBUG] try to reconnect");
       stopAll(); if (myRole) start(myRole);
     }
   }, seconds * 1000);

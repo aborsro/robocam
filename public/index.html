@@ -149,7 +149,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v41
+   <span>robocam</span>v42
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -161,7 +161,7 @@ video {
      <button id="senderBtn" onclick="start('sender')">send</button>
       <button id="receiverBtn" onclick="start('receiver')">receive</button>
       <button id="stopBtn" onclick="stopAll()" style="display:none;">stop</button>
-      <button id="audioBtn" onclick="toggleAudio()">audio on</button>
+      <button id="audioBtn">audio off</button>
       <button id="blackoutBtn" onclick="blackoutScreen()">blackout</button>
       <select id="cameraSelect" style="display:none;"></select>
     </div>
@@ -378,6 +378,23 @@ function blackoutScreen() {
   document.getElementById('blackoutBtn').textContent = blackOut ? 'display' : 'blackout';
 }
 
+// --- Buttons ---
+audioBtn.addEventListener("click", () => {
+  audioSetting = !audioSetting;
+  setAudioTracks(audioSetting);
+  audioBtn.textContent = audioSetting ? "audio off" : "audio on";
+});
+
+
+function setAudioTracks(enable) {
+  if (localStream) {
+    localStream.getAudioTracks().forEach(track => {
+      track.enabled = enable;
+    });
+  }
+}
+
+  
 // --- Nachrichten vom Server verarbeiten ---
 async function handleMessage(msg) {
   try {
@@ -396,17 +413,6 @@ async function handleMessage(msg) {
     } catch (err) {
       console.error("JSON parse error:", err, text);
       return;
-    }
-
-    if (data.type === "senderStatus") {
-      const senderBtn = document.getElementById("senderBtn");
-      if (data.active) {
-        senderBtn.disabled = true;
-        senderBtn.textContent = "sender (locked)";
-      } else {
-        senderBtn.disabled = false;
-        senderBtn.textContent = "send";
-      }
     }
   
     if (data.type === "error") {
@@ -437,7 +443,19 @@ async function handleMessage(msg) {
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           ws.send(JSON.stringify({ sdp: pc.localDescription }));
+
+		
+		} else if (data.sdp.type === "answer") {
+          // Wir sind der Offerer
+          console.log("Received answer");
+      
+          if (pc.signalingState === "have-local-offer") {
+            await pc.setRemoteDescription(data.sdp);
+          } else {
+            console.warn("Ignoring answer, wrong state:", pc.signalingState);
+          }
         }
+	
       } catch (err) {
         console.error("setRemoteDescription error:", err);
       }
@@ -486,7 +504,6 @@ async function start(role) {
     setInfoMsg("start sender");
 	ws.send(JSON.stringify({ type: "senderStatus", active: true, roomId: ROOM_ID }));
     ws.send(JSON.stringify({ type: "register", role: "sender", roomId: ROOM_ID }));
-    disableAudio();
     senderBtn.classList.add('active');
     document.getElementById("localVideo").style.display = "block"; 
     document.getElementById("remoteVideo").style.display = "none";
@@ -538,18 +555,36 @@ pc.onnegotiationneeded = async () => {
   // --- Transceiver nur für Receiver ---
   if (role === 'receiver') {
     console.log("[DEBUG] Receiver: adding recvonly transceivers");
-    pc.addTransceiver("video", { direction: "recvonly" });
     pc.addTransceiver("audio", { direction: "recvonly" });
+    pc.addTransceiver("video", { direction: "recvonly" });
+  }
+  
+  // --- Transceiver nur für Sender ---
+  if (role === 'sender') {
+    console.log("[DEBUG] Sender: adding sendrecv transceivers");
+    pc.addTransceiver("audio", { direction: "sendrecv" });
+    pc.addTransceiver("video", { direction: "sendrecv" });
   }
 
   // --- Remote-Stream empfangen ---
   pc.ontrack = e => {
     console.log("[DEBUG] Track received:", e.streams);
-    const remoteVideo = document.getElementById('remoteVideo');
-    remoteVideo.srcObject = e.streams[0];
-    remoteVideo.play().catch(err => console.error("Play error:", err));
+    if (remoteVideo.srcObject !== e.streams[0]) {
+      remoteVideo.srcObject = e.streams[0];
+    }
+    remoteVideo.play().catch(err => console.warn("Play error:", err));
     setAppState(ConnectionState.CONNECTED);
   };
+  
+  
+  
+//  pc.ontrack = e => {
+//    console.log("[DEBUG] Track received:", e.streams);
+//    const remoteVideo = document.getElementById('remoteVideo');
+//    remoteVideo.srcObject = e.streams[0];
+//    remoteVideo.play().catch(err => console.error("Play error:", err));
+//    setAppState(ConnectionState.CONNECTED);
+//  };
 
   pc.onicecandidate = e => { if (e.candidate) ws.send(JSON.stringify({ candidate: e.candidate })); };
   pc.oniceconnectionstatechange = () => {
@@ -698,15 +733,10 @@ if (pc) {
 
 
 function disableAudio() {
+  setInfoMsg("disableAudio");
   audioSetting = false;
   if (localStream) { localStream.getAudioTracks().forEach(t => t.enabled = false); }
   document.getElementById('audioBtn').textContent = 'audio on';
-}
-
-function toggleAudio() {
-  audioSetting = !audioSetting;
-  if (localStream) { localStream.getAudioTracks().forEach(t => t.enabled = audioSetting); }
-  document.getElementById('audioBtn').textContent = audioSetting ? 'audio on' : 'audio off';
 }
 
 function stopAll() {

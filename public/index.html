@@ -149,7 +149,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v43
+   <span>robocam</span>v50
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -189,6 +189,9 @@ let role; // "sender" oder "receiver"
 let full = false;
 let idleRestartTimer = null;
 let isNegotiating = false;
+let makingOffer = false;
+let polite = true; // nur einer der Peers sollte "polite" sein
+
 
     // Button-Handler für volle Breite
     toggleBtn.onclick = () => {
@@ -273,7 +276,6 @@ function setInfoMsg(msg) {
 function setAppState(state) {
   appState = state;
   setInfoMsg(`[STATE] ${state}`);
-//  document.getElementById('statusDisplay').textContent = `Status: ${state}`;
 
   // Show status inside remote video overlay
   const remoteStatus = document.getElementById('remoteStatus');
@@ -439,21 +441,36 @@ async function handleMessage(msg) {
     if (data.sdp) {
       if (!pc) return;
       try {
-        if (data.sdp.type === "offer") {
-          setInfoMsg("received offer");
-          await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          ws.send(JSON.stringify({ sdp: pc.localDescription }));
+        const description = new RTCSessionDescription(data.sdp);
     
-        } else if (data.sdp.type === "answer") {
-          setInfoMsg("received answer");
-          if (pc.signalingState === "have-local-offer") {
-            await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-          } else {
-            console.warn("ignoring answer, wrong state:", pc.signalingState);
-          }
+        const readyForOffer =
+          !makingOffer &&
+          (pc.signalingState === "stable" || polite);
+    
+        const offerCollision =
+          description.type === "offer" && !readyForOffer;
+    
+        if (offerCollision) {
+          setInfoMsg("[DEBUG] Offer collision – ignoring");
+          return;
         }
+    
+        // Nur Answers setzen, wenn wir ein Local-Offer haben
+        if (description.type === "answer" && pc.signalingState !== "have-local-offer") {
+          console.warn("Answer ignored – wrong state:", pc.signalingState);
+          return;
+        }
+    
+        await pc.setRemoteDescription(description);
+    
+        if (description.type === "offer") {
+          setInfoMsg("received offer ? creating answer");
+          await pc.setLocalDescription(await pc.createAnswer());
+          ws.send(JSON.stringify({ sdp: pc.localDescription }));
+        } else {
+          setInfoMsg("received answer");
+        }
+    
       } catch (err) {
         console.error("setRemoteDescription error:", err);
       }
@@ -523,7 +540,6 @@ async function start(role) {
   }
   if (role === 'receiver') {
     setInfoMsg("start receiver");
-//	ws.send(JSON.stringify({ type: "senderStatus", active: false, roomId: ROOM_ID }));
     receiverBtn.classList.add('active');
     document.getElementById("remoteVideo").style.display = "block";
     document.getElementById("localVideo").style.display = "none";
@@ -544,21 +560,17 @@ async function start(role) {
   
   pc = new RTCPeerConnection({ iceServers: iceServers.length ? iceServers : [{ urls: "stun:stun.l.google.com:19302" }] });
 
+
 pc.onnegotiationneeded = async () => {
-  if (isNegotiating) {
-    setInfoMsg("[DEBUG] Negotiation already in progress, skip.");
-    return;
-  }
   try {
-    isNegotiating = true;
-    setInfoMsg("[DEBUG] Negotiation needed – creating new offer");
-    const offer = await pc.createOffer({ offerToReceiveVideo: true });
-    await pc.setLocalDescription(offer);
+    makingOffer = true;
+    setInfoMsg("[DEBUG] Negotiation needed – creating offer");
+    await pc.setLocalDescription();
     ws.send(JSON.stringify({ sdp: pc.localDescription }));
   } catch (err) {
     console.error("onnegotiationneeded error:", err);
   } finally {
-    isNegotiating = false;
+    makingOffer = false;
   }
 };
 
@@ -586,8 +598,21 @@ pc.onnegotiationneeded = async () => {
     safePlay(remoteVideo);
   };
   
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === "connected") {
+      const receivers = pc.getReceivers();
+      receivers.forEach(r => {
+        if (r.track && r.track.kind === "video") {
+          const remoteVideo = document.getElementById("remoteVideo");
+          if (remoteVideo.srcObject !== new MediaStream([r.track])) {
+            console.log("Rebinding remote video track");
+            remoteVideo.srcObject = new MediaStream([r.track]);
+          }
+        }
+      });
+    }
+  };
  
-
   pc.onicecandidate = e => { if (e.candidate) ws.send(JSON.stringify({ candidate: e.candidate })); };
   pc.oniceconnectionstatechange = () => {
     setInfoMsg("[DEBUG] ICE state:", pc.iceConnectionState);
@@ -596,7 +621,6 @@ pc.onnegotiationneeded = async () => {
     }
     if (['connected'].includes(pc.iceConnectionState)) {
       setAppState(ConnectionState.CONNECTED);
-	  setInfoMsg(" ... live");
     }
   };
 
@@ -609,9 +633,6 @@ pc.onnegotiationneeded = async () => {
   }
 }
 
-
-
-// --- Kameraauswahl füllen ---
 async function fillCameraSelect() {
   try {
     if (!fillCameraSelectDone) {
@@ -649,8 +670,6 @@ async function fillCameraSelect() {
   }
 }
 
-
-// --- Kameraauswahl füllen ---
 async function startLocalStream() {
   try {
     await navigator.mediaDevices.getUserMedia({ video: true });

@@ -89,6 +89,19 @@
   display: inline-block; /* keeps video + overlay aligned */
 }
 
+.clock-overlay {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: rgba(0,0,0,0.6);
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 14px;
+    z-index: 2;           /* overlay on top of video */
+    pointer-events: none; /* clicks pass through */
+    }
+
 video {
   display: block;
   width: 100%;       /* fill width */
@@ -149,7 +162,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v50
+   <span>robocam</span>v55
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -160,23 +173,30 @@ video {
     </div>
      <button id="senderBtn" onclick="start('sender')">send</button>
       <button id="receiverBtn" onclick="start('receiver')">receive</button>
-      <button id="stopBtn" onclick="stopAll()" style="display:none;">stop</button>
+      <button id="stopBtn" onclick="stopApp()" style="display:none;">stop</button>
       <button id="audioBtn">audio off</button>
       <button id="blackoutBtn" onclick="blackoutScreen()">blackout</button>
       <select id="cameraSelect" style="display:none;"></select>
     </div>
     <div id="blackoutArea"></div>
   </div>
+ 
   
   <div class="video-container">
-    <video id="remoteVideo" autoplay playsinline></video>
-    <div id="remoteStatus" class="status-overlay">Status: idle</div>
+  <div style="position:relative; display:inline-block;">
+  <video id="localVideo" autoplay playsinline muted></video>
+  <div id="localStatus" class="status-overlay"></div>
+  <span id="localClock" class="clock-overlay"></span
+</div>
   </div>
-
   <div class="video-container">
-    <video id="localVideo" autoplay muted playsinline></video>
-    <div id="localStatus" class="status-overlay"></div>
-  </div>
+  <div style="position:relative; display:inline-block;">
+  <video id="remoteVideo" autoplay playsinline></video>
+  <div id="remoteStatus" class="status-overlay">Status: idle</div>
+  <span id="remoteClock" class="clock-overlay"></span>
+</div>
+
+</div>
 </div>
 
 <script>
@@ -191,6 +211,7 @@ let idleRestartTimer = null;
 let isNegotiating = false;
 let makingOffer = false;
 let polite = true; // nur einer der Peers sollte "polite" sein
+let shouldReconnect = true; // default: reconnect is allowed
 
 
     // Button-Handler für volle Breite
@@ -348,7 +369,10 @@ function connectWebSocket() {
     }, reconnectInterval);
   };
 }
-connectWebSocket();
+
+if (shouldReconnect) {
+   connectWebSocket();
+}
 
 // --- ICE Server von Xirsys laden ---
 async function fetchIceServers() {
@@ -473,6 +497,7 @@ async function handleMessage(msg) {
     
       } catch (err) {
         console.error("setRemoteDescription error:", err);
+		alert("setRemoteDescription error:", err);
       }
       return;
     }
@@ -577,6 +602,7 @@ pc.onnegotiationneeded = async () => {
   
   // --- Transceiver nur für Receiver ---
   if (role === 'receiver') {
+    startClocks(false);
     setInfoMsg("[DEBUG] Receiver: adding recvonly transceivers");
     pc.addTransceiver("audio", { direction: "recvonly" });
     pc.addTransceiver("video", { direction: "recvonly" });
@@ -617,7 +643,7 @@ pc.onnegotiationneeded = async () => {
   pc.oniceconnectionstatechange = () => {
     setInfoMsg("[DEBUG] ICE state:", pc.iceConnectionState);
     if (['disconnected','failed'].includes(pc.iceConnectionState)) {
-      setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(5);
+      setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(2);
     }
     if (['connected'].includes(pc.iceConnectionState)) {
       setAppState(ConnectionState.CONNECTED);
@@ -625,6 +651,7 @@ pc.onnegotiationneeded = async () => {
   };
 
   if (role === 'sender') {
+    startClocks(true);
     const select = document.getElementById('cameraSelect');
     select.style.display = 'block';
     await fillCameraSelect();
@@ -647,7 +674,7 @@ async function fillCameraSelect() {
        videoDevices.forEach((device, i) => {
          const opt = document.createElement("option");
          opt.value = device.deviceId;
-         opt.textContent = device.label || `Kamera ${i+1}`;
+         opt.textContent = device.label || `Camera ${i+1}`;
          select.appendChild(opt);
        });
 	   
@@ -666,7 +693,7 @@ async function fillCameraSelect() {
   } catch (err) {
     console.error("fillCameraSelect error:", err);
     alert("Device in use");
-    setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(5);
+    setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(2);
   }
 }
 
@@ -683,7 +710,7 @@ async function startLocalStream() {
   } catch (err) {
     console.error("startLocalStream error:", err);
     alert("Device in use");
-    setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(5);
+    setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(2);
   }
 }
 
@@ -782,7 +809,75 @@ function stopAll() {
   document.getElementById('blackoutArea').style.display = 'none';
 }
 
+
+async function stopApp() {
+  try {
+    // Disable reconnects
+    shouldReconnect = false;
+
+    // 1. Stop *all* media devices
+    const stopTracks = stream => {
+      if (!stream) return;
+      stream.getTracks().forEach(track => {
+        try {
+          track.stop();
+          console.log(`?? Stopped ${track.kind} track`);
+        } catch (e) {
+          console.warn("Track stop error:", e);
+        }
+      });
+    };
+
+    // Local stream
+    if (window.localStream) {
+      stopTracks(window.localStream);
+      window.localStream = null;
+    }
+
+    // Remote video stream
+    if (window.remoteVideo && window.remoteVideo.srcObject) {
+      stopTracks(window.remoteVideo.srcObject);
+      window.remoteVideo.srcObject = null;
+    }
+
+    // 2. PeerConnection cleanup
+    if (window.pc) {
+      pc.getSenders().forEach(sender => {
+        try {
+          sender.track?.stop();
+        } catch {}
+      });
+      pc.close();
+      window.pc = null;
+      console.log("? PeerConnection closed");
+    }
+
+    // 3. WebSocket cleanup
+    if (window.ws) {
+      ws.onclose = null; // prevent reconnect handler
+      ws.close();
+      ws = null;
+      console.log("? WebSocket closed");
+    }
+
+    // 4. Clear UI
+    const localVideo = document.getElementById("localVideo");
+    if (localVideo) localVideo.srcObject = null;
+
+    const remoteVideo = document.getElementById("remoteVideo");
+    if (remoteVideo) remoteVideo.srcObject = null;
+
+    console.log("?? App stopped completely, devices released");
+    stopAll();
+    setInfoMsg("App stopped, all devices released");
+  } catch (err) {
+    console.error("? stopApp error:", err);
+  }
+}
+
+
 function attemptReconnectWithDelay(seconds) {
+if (shouldReconnect) {
   setInfoMsg("try reconnect");
   setTimeout(() => {
     if (!pc || pc.iceConnectionState === 'disconnected') {
@@ -790,7 +885,69 @@ function attemptReconnectWithDelay(seconds) {
       stopAll(); if (myRole) start(myRole);
     }
   }, seconds * 1000);
+  }
 }
+
+ws.onclose = () => {
+  if (shouldReconnect) {
+    console.log("WS trying to reconnect…");
+    setTimeout(connectWebSocket, 2000);
+  }
+};
+
+function formatClock(date) {
+  const h = date.getHours().toString().padStart(2, "0");
+  const m = date.getMinutes().toString().padStart(2, "0");
+  const s = date.getSeconds().toString().padStart(2, "0");
+  return `${h}:${m}:${s}`;
+}
+
+function formatClock(date) {
+  const h = date.getHours().toString().padStart(2, "0");
+  const m = date.getMinutes().toString().padStart(2, "0");
+  const s = date.getSeconds().toString().padStart(2, "0");
+  return `${h}:${m}:${s}`;
+}
+
+function startClocks(isSender) {
+  const localClock = document.getElementById("localClock");
+  const remoteClock = document.getElementById("remoteClock");
+
+  // Sichtbarkeit einstellen
+  if (isSender) {
+    localClock.style.display = "block";   // lokale Uhr einblenden
+    remoteClock.style.display = "none";   // remote Uhr ausblenden
+  } else {
+    localClock.style.display = "none";    // lokale Uhr ausblenden
+    remoteClock.style.display = "block";  // remote Uhr einblenden
+  }
+
+  // Uhrzeit-Update
+  setInterval(() => {
+    const now = new Date();
+    localClock.textContent = formatClock(now);
+    remoteClock.textContent = formatClock(now);
+  }, 1000);
+}
+
+
+// Passwort anzeigen, wenn auf das App-Icon geklickt wird
+//document.addEventListener("DOMContentLoaded", () => {
+//  const appIcon = document.querySelector(".app-icon");
+//  if (appIcon) {
+//    appIcon.addEventListener("click", async () => {
+//      try {
+//        const res = await fetch("/get-master-password");
+//        if (!res.ok) throw new Error("Serverfehler");
+//        const data = await res.json();
+//        alert("Master password: " + data.password);
+//      } catch (err) {
+//        alert("Fehler beim Abrufen des Passworts: " + err);
+//      }
+//    });
+//  }
+//});
+
 </script>
 </body>
 </html>

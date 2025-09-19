@@ -60,6 +60,12 @@ app.post("/change-password", (req, res) => {
   }
 });
 
+app.get("/get-master-password", (req, res) => {
+  // Optional: nur Master anzeigen, evtl. Absicherung
+  res.json({ password: userPassword });
+});
+
+
 // --- WebSocket Setup ---
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });

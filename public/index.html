@@ -58,8 +58,8 @@
   button.active { background-color: #00FF00; transform: scale(1.05); }
   #stopBtn { background-color: #FF0000; }
   #stopBtn:hover:enabled { background-color: #d32f2f; }
-  #remoteVideo { width: 80%; max-width: 100%; }
-  #localVideo { width: 80%; max-width: 100%; }
+  #remoteVideo { width: 70%; max-width: 100%; }
+  #localVideo { width: 70%; max-width: 100%; }
   #blackoutBtn { background-color: grey; opacity: 1; z-index: 99999; }
   #audioBtn { background-color: grey; opacity: 1; z-index: 99998; }
   #blackoutArea { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: black; opacity: 1; z-index: 99998; }
@@ -113,13 +113,15 @@ video {
   pointer-events: none; /* clicks pass through */
 }
 
-    .fullwidth {
-      max-width: 100% !important;
-      width: 100% !important;
-      height: auto !important;
-    }
+.fullwidth {
+  max-width: 100% !important;
+  width: 100% !important;
+  height: 80vh !important;   /* 80% der Fensterhöhe */
+  object-fit: contain;       /* Bild komplett anzeigen ohne Verzerrung */
+}
+
   .inline-container img { vertical-align: middle; height: 40px; }
-  .inline-container span { vertical-align: middle; margin-left: 10px; font-size: 40px; }
+  .inline-container span { vertical-align: middle; margin-left: 10px; font-size: 30px; }
 
   </style>
 </head>
@@ -149,7 +151,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v50
+   <span>robocam</span>v51
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -427,6 +429,8 @@ async function handleMessage(msg) {
     // --- Statusmeldungen vom Server ---
     if (data.type === "senderStatus") {
       const senderBtn = document.getElementById("senderBtn");
+      window.senderActive = data.active;  // ?? global merken
+    
       if (data.active) {
         senderBtn.disabled = true;
         senderBtn.textContent = "sender (locked)";
@@ -434,8 +438,9 @@ async function handleMessage(msg) {
         senderBtn.disabled = false;
         senderBtn.textContent = "send";
       }
-      return; // keine weitere Verarbeitung
+      return;
     }
+
 
     // --- WebRTC Signalisierung ---
     if (data.sdp) {
@@ -464,7 +469,7 @@ async function handleMessage(msg) {
         await pc.setRemoteDescription(description);
     
         if (description.type === "offer") {
-          setInfoMsg("received offer ? creating answer");
+          setInfoMsg("creating answer");
           await pc.setLocalDescription(await pc.createAnswer());
           ws.send(JSON.stringify({ sdp: pc.localDescription }));
         } else {
@@ -596,6 +601,7 @@ pc.onnegotiationneeded = async () => {
       remoteVideo.srcObject = e.streams[0];
     }
     safePlay(remoteVideo);
+    setInfoMsg("receiving");
   };
   
   pc.onconnectionstatechange = () => {
@@ -629,7 +635,10 @@ pc.onnegotiationneeded = async () => {
     select.style.display = 'block';
     await fillCameraSelect();
 	await startLocalStream();
+    setInfoMsg("sending");
 	select.onchange = () => setAppState(ConnectionState.IDLE);
+    // Audio-Button automatisch klicken, wenn Sender startet
+    document.getElementById("audioBtn").click();
   }
 }
 
@@ -760,6 +769,7 @@ function disableAudio() {
   document.getElementById('audioBtn').textContent = 'audio on';
 }
 
+
 function stopAll() {
   setInfoMsg("stopAll");
   setAppState(ConnectionState.IDLE);
@@ -768,19 +778,28 @@ function stopAll() {
   if (myRole === "sender") {
     ws.send(JSON.stringify({ type: "senderStatus", active: false, roomId: ROOM_ID }));
   }
-//  myRole = null;
+
   if (pc) { pc.close(); pc = null; }
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
-  document.getElementById('senderBtn').disabled = false;
-  document.getElementById('receiverBtn').disabled = false;
-  document.getElementById('senderBtn').classList.remove('active');
-  document.getElementById('receiverBtn').classList.remove('active');
+
+  const senderBtn = document.getElementById('senderBtn');
+  const receiverBtn = document.getElementById('receiverBtn');
+
+  senderBtn.disabled = false;
+  receiverBtn.disabled = false;
+  senderBtn.classList.remove('active');
+  receiverBtn.classList.remove('active');
   document.getElementById('stopBtn').style.display = 'none';
   document.getElementById('cameraSelect').style.display = 'none';
-//  document.getElementById('localVideo').srcObject = null;
-//  document.getElementById('remoteVideo').srcObject = null;
   document.getElementById('blackoutArea').style.display = 'none';
+
+  // hier prüfen ob Sender aktiv ist
+  if (window.senderActive) {
+    senderBtn.disabled = true;
+    senderBtn.textContent = "sender (locked)";
+  }
 }
+
 
 function attemptReconnectWithDelay(seconds) {
   setInfoMsg("try reconnect");
@@ -791,6 +810,24 @@ function attemptReconnectWithDelay(seconds) {
     }
   }, seconds * 1000);
 }
+
+// Passwort anzeigen, wenn auf das App-Icon geklickt wird
+//document.addEventListener("DOMContentLoaded", () => {
+//  const appIcon = document.querySelector(".app-icon");
+//  if (appIcon) {
+//    appIcon.addEventListener("click", async () => {
+//      try {
+//        const res = await fetch("/get-master-password");
+//        if (!res.ok) throw new Error("Serverfehler");
+//        const data = await res.json();
+//        alert("Master password: " + data.password);
+//      } catch (err) {
+//        alert("Fehler beim Abrufen des Passworts: " + err);
+//      }
+//    });
+//  }
+//});
+
 </script>
 </body>
 </html>

@@ -151,7 +151,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v51
+   <span>robocam</span>v52
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -399,6 +399,7 @@ function setAudioTracks(enable) {
   }
 }
 
+
   
 // --- Nachrichten vom Server verarbeiten ---
 async function handleMessage(msg) {
@@ -455,11 +456,12 @@ async function handleMessage(msg) {
         const offerCollision =
           description.type === "offer" && !readyForOffer;
     
-        if (offerCollision) {
-          setInfoMsg("[DEBUG] Offer collision – ignoring");
-          return;
-        }
-    
+        ignoreOffer = offerCollision;
+         if (ignoreOffer) {
+           console.warn("[DEBUG] Ignoring offer due to collision");
+           return;
+         }   
+		 
         // Nur Answers setzen, wenn wir ein Local-Offer haben
         if (description.type === "answer" && pc.signalingState !== "have-local-offer") {
           console.warn("Answer ignored – wrong state:", pc.signalingState);
@@ -497,6 +499,7 @@ async function handleMessage(msg) {
   }
 }
 
+
 let playPromise;
 
 function safePlay(videoEl) {
@@ -518,42 +521,54 @@ async function start(role) {
 
   setInfoMsg(`[DEBUG] Starte als ${role}`);
   myRole = role;
+
   if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'register', role: myRole, roomId: ROOM_ID }));
+    ws.send(JSON.stringify({ type: "register", role: myRole, roomId: ROOM_ID }));
   }
-  const senderBtn = document.getElementById('senderBtn');
-  const receiverBtn = document.getElementById('receiverBtn');
-  const stopBtn = document.getElementById('stopBtn');
-  document.getElementById('localVideo').srcObject = null;
-  document.getElementById('remoteVideo').srcObject = null;
+
+  const senderBtn = document.getElementById("senderBtn");
+  const receiverBtn = document.getElementById("receiverBtn");
+  const stopBtn = document.getElementById("stopBtn");
+  document.getElementById("localVideo").srcObject = null;
+  document.getElementById("remoteVideo").srcObject = null;
+
   senderBtn.disabled = true;
   receiverBtn.disabled = true;
-  senderBtn.classList.remove('active');
-  receiverBtn.classList.remove('active');
+  senderBtn.classList.remove("active");
+  receiverBtn.classList.remove("active");
   senderBtn.textContent = "send";
   receiverBtn.textContent = "receive";
 
-  if (role === 'sender') { 
+  if (role === "sender") {
     setInfoMsg("start sender");
-	ws.send(JSON.stringify({ type: "senderStatus", active: true, roomId: ROOM_ID }));
+    ws.send(JSON.stringify({ type: "senderStatus", active: true, roomId: ROOM_ID }));
     ws.send(JSON.stringify({ type: "register", role: "sender", roomId: ROOM_ID }));
-    senderBtn.classList.add('active');
-    document.getElementById("localVideo").style.display = "block"; 
+    senderBtn.classList.add("active");
+    document.getElementById("localVideo").style.display = "block";
     document.getElementById("remoteVideo").style.display = "none";
     document.getElementById("remoteStatus").style.display = "none";
     document.getElementById("localStatus").style.display = "block";
   }
-  if (role === 'receiver') {
+  if (role === "receiver") {
     setInfoMsg("start receiver");
-    receiverBtn.classList.add('active');
+    receiverBtn.classList.add("active");
     document.getElementById("remoteVideo").style.display = "block";
     document.getElementById("localVideo").style.display = "none";
     document.getElementById("blackoutArea").style.display = "none";
     document.getElementById("localStatus").style.display = "none";
     document.getElementById("remoteStatus").style.display = "block";
   }
-  stopBtn.style.display = 'block';
+
+  stopBtn.style.display = "block";
   setAppState(ConnectionState.WAITING);
+
+  // --- Vorherige Verbindung schließen ---
+  if (pc) {
+    try {
+      pc.close();
+    } catch (e) {}
+    pc = null;
+  }
 
   // --- ICE Server laden ---
   let iceServers = [];
@@ -562,40 +577,48 @@ async function start(role) {
   } catch (e) {
     console.error("ICE Server fetch failed:", e);
   }
+
+  pc = new RTCPeerConnection({
+    iceServers: iceServers.length
+      ? iceServers
+      : [{ urls: "stun:stun.l.google.com:19302" }],
+  });
+
+  // --- Perfect Negotiation Pattern ---
+  makingOffer = false;
+  ignoreOffer = false;
+
+  pc.onnegotiationneeded = async () => {
+    try {
+      makingOffer = true;
+      setInfoMsg("[DEBUG] negotiationneeded – creating offer");
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      ws.send(JSON.stringify({ sdp: pc.localDescription }));
+    } catch (err) {
+      console.error("onnegotiationneeded error:", err);
+    } finally {
+      makingOffer = false;
+    }
+  };
   
-  pc = new RTCPeerConnection({ iceServers: iceServers.length ? iceServers : [{ urls: "stun:stun.l.google.com:19302" }] });
-
-
-pc.onnegotiationneeded = async () => {
-  try {
-    makingOffer = true;
-    setInfoMsg("[DEBUG] Negotiation needed – creating offer");
-    await pc.setLocalDescription();
-    ws.send(JSON.stringify({ sdp: pc.localDescription }));
-  } catch (err) {
-    console.error("onnegotiationneeded error:", err);
-  } finally {
-    makingOffer = false;
-  }
-};
-
   
   // --- Transceiver nur für Receiver ---
-  if (role === 'receiver') {
+  if (role === "receiver") {
     setInfoMsg("[DEBUG] Receiver: adding recvonly transceivers");
     pc.addTransceiver("audio", { direction: "recvonly" });
     pc.addTransceiver("video", { direction: "recvonly" });
   }
-  
+
   // --- Transceiver nur für Sender ---
-  if (role === 'sender') {
+  if (role === "sender") {
     setInfoMsg("[DEBUG] Sender: adding sendrecv transceivers");
     pc.addTransceiver("audio", { direction: "sendrecv" });
     pc.addTransceiver("video", { direction: "sendrecv" });
   }
 
   // --- Remote-Stream empfangen ---
-  pc.ontrack = e => {
+  pc.ontrack = (e) => {
     setInfoMsg("[DEBUG] track received:", e.streams);
     if (remoteVideo.srcObject !== e.streams[0]) {
       remoteVideo.srcObject = e.streams[0];
@@ -603,11 +626,11 @@ pc.onnegotiationneeded = async () => {
     safePlay(remoteVideo);
     setInfoMsg("receiving");
   };
-  
+
   pc.onconnectionstatechange = () => {
     if (pc.connectionState === "connected") {
       const receivers = pc.getReceivers();
-      receivers.forEach(r => {
+      receivers.forEach((r) => {
         if (r.track && r.track.kind === "video") {
           const remoteVideo = document.getElementById("remoteVideo");
           if (remoteVideo.srcObject !== new MediaStream([r.track])) {
@@ -618,29 +641,39 @@ pc.onnegotiationneeded = async () => {
       });
     }
   };
- 
-  pc.onicecandidate = e => { if (e.candidate) ws.send(JSON.stringify({ candidate: e.candidate })); };
+
+  pc.onicecandidate = (e) => {
+    if (e.candidate) ws.send(JSON.stringify({ candidate: e.candidate }));
+  };
+
   pc.oniceconnectionstatechange = () => {
     setInfoMsg("[DEBUG] ICE state:", pc.iceConnectionState);
-    if (['disconnected','failed'].includes(pc.iceConnectionState)) {
-      setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(5);
+    if (["disconnected", "failed"].includes(pc.iceConnectionState)) {
+      setAppState(ConnectionState.ERROR);
+      attemptReconnectWithDelay(5);
     }
-    if (['connected'].includes(pc.iceConnectionState)) {
+    if (["connected"].includes(pc.iceConnectionState)) {
       setAppState(ConnectionState.CONNECTED);
     }
   };
 
-  if (role === 'sender') {
-    const select = document.getElementById('cameraSelect');
-    select.style.display = 'block';
+  if (role === "sender") {
+    const select = document.getElementById("cameraSelect");
+    select.style.display = "block";
     await fillCameraSelect();
-	await startLocalStream();
+    await startLocalStream();
     setInfoMsg("sending");
-	select.onchange = () => setAppState(ConnectionState.IDLE);
+    select.onchange = () => setAppState(ConnectionState.IDLE);
+
     // Audio-Button automatisch klicken, wenn Sender startet
     document.getElementById("audioBtn").click();
   }
 }
+
+
+
+
+
 
 async function fillCameraSelect() {
   try {
@@ -774,31 +807,65 @@ function stopAll() {
   setInfoMsg("stopAll");
   setAppState(ConnectionState.IDLE);
   localOfferSent = false;
-  
+
   if (myRole === "sender") {
     ws.send(JSON.stringify({ type: "senderStatus", active: false, roomId: ROOM_ID }));
   }
 
-  if (pc) { pc.close(); pc = null; }
-  if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+  // --- Verbindung sauber schließen ---
+  if (pc) {
+    try {
+      pc.getSenders().forEach(sender => {
+        try {
+          if (sender.track) sender.track.stop();
+        } catch (e) {}
+      });
+      pc.close();
+    } catch (e) {
+      console.warn("Error closing pc:", e);
+    }
+    pc = null;
+  }
 
-  const senderBtn = document.getElementById('senderBtn');
-  const receiverBtn = document.getElementById('receiverBtn');
+  // --- Lokalen Stream beenden ---
+  if (localStream) {
+    try {
+      localStream.getTracks().forEach(t => t.stop());
+    } catch (e) {}
+    localStream = null;
+  }
+
+  // --- Flags zurücksetzen (Perfect Negotiation Pattern) ---
+  makingOffer = false;
+  ignoreOffer = false;
+
+  // --- Buttons zurücksetzen ---
+  const senderBtn = document.getElementById("senderBtn");
+  const receiverBtn = document.getElementById("receiverBtn");
 
   senderBtn.disabled = false;
   receiverBtn.disabled = false;
-  senderBtn.classList.remove('active');
-  receiverBtn.classList.remove('active');
-  document.getElementById('stopBtn').style.display = 'none';
-  document.getElementById('cameraSelect').style.display = 'none';
-  document.getElementById('blackoutArea').style.display = 'none';
+  senderBtn.classList.remove("active");
+  receiverBtn.classList.remove("active");
 
-  // hier prüfen ob Sender aktiv ist
+  document.getElementById("stopBtn").style.display = "none";
+  document.getElementById("cameraSelect").style.display = "none";
+  document.getElementById("blackoutArea").style.display = "none";
+
+  // falls Sender noch aktiv? -> send-Button gesperrt lassen
   if (window.senderActive) {
     senderBtn.disabled = true;
     senderBtn.textContent = "sender (locked)";
+  } else {
+    senderBtn.textContent = "send";
   }
+
+  // Remote/Local Video zurücksetzen
+  document.getElementById("localVideo").srcObject = null;
+  document.getElementById("remoteVideo").srcObject = null;
 }
+
+
 
 
 function attemptReconnectWithDelay(seconds) {

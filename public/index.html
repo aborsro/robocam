@@ -58,8 +58,8 @@
   button.active { background-color: #00FF00; transform: scale(1.05); }
   #stopBtn { background-color: #FF0000; }
   #stopBtn:hover:enabled { background-color: #d32f2f; }
-  #remoteVideo { width: 70%; max-width: 100%; }
-  #localVideo { width: 70%; max-width: 100%; }
+  #remoteVideo { width: 80%; max-width: 100%; }
+  #localVideo { width: 80%; max-width: 100%; }
   #blackoutBtn { background-color: grey; opacity: 1; z-index: 99999; }
   #audioBtn { background-color: grey; opacity: 1; z-index: 99998; }
   #blackoutArea { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: black; opacity: 1; z-index: 99998; }
@@ -89,6 +89,19 @@
   display: inline-block; /* keeps video + overlay aligned */
 }
 
+.clock-overlay {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: rgba(0,0,0,0.6);
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 14px;
+    z-index: 2;           /* overlay on top of video */
+    pointer-events: none; /* clicks pass through */
+    }
+
 video {
   display: block;
   width: 100%;       /* fill width */
@@ -116,12 +129,10 @@ video {
 .fullwidth {
   max-width: 100% !important;
   width: 100% !important;
-  height: 80vh !important;   /* 80% der Fensterhöhe */
-  object-fit: contain;       /* Bild komplett anzeigen ohne Verzerrung */
+  height: auto !important;
 }
-
   .inline-container img { vertical-align: middle; height: 40px; }
-  .inline-container span { vertical-align: middle; margin-left: 10px; font-size: 30px; }
+  .inline-container span { vertical-align: middle; margin-left: 10px; font-size: 40px; }
 
   </style>
 </head>
@@ -151,7 +162,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v52
+   <span>robocam</span>v60
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -162,23 +173,30 @@ video {
     </div>
      <button id="senderBtn" onclick="start('sender')">send</button>
       <button id="receiverBtn" onclick="start('receiver')">receive</button>
-      <button id="stopBtn" onclick="stopAll()" style="display:none;">stop</button>
+      <button id="stopBtn" onclick="stopApp()" style="display:none;">stop</button>
       <button id="audioBtn">audio off</button>
       <button id="blackoutBtn" onclick="blackoutScreen()">blackout</button>
       <select id="cameraSelect" style="display:none;"></select>
     </div>
     <div id="blackoutArea"></div>
   </div>
+ 
   
   <div class="video-container">
-    <video id="remoteVideo" autoplay playsinline></video>
-    <div id="remoteStatus" class="status-overlay">Status: idle</div>
+  <div style="position:relative; display:inline-block;">
+  <video id="localVideo" autoplay playsinline muted></video>
+  <div id="localStatus" class="status-overlay"></div>
+  <span id="localClock" class="clock-overlay"></span
+</div>
   </div>
-
   <div class="video-container">
-    <video id="localVideo" autoplay muted playsinline></video>
-    <div id="localStatus" class="status-overlay"></div>
-  </div>
+  <div style="position:relative; display:inline-block;">
+  <video id="remoteVideo" autoplay playsinline></video>
+  <div id="remoteStatus" class="status-overlay">Status: idle</div>
+  <span id="remoteClock" class="clock-overlay"></span>
+</div>
+
+</div>
 </div>
 
 <script>
@@ -193,21 +211,22 @@ let idleRestartTimer = null;
 let isNegotiating = false;
 let makingOffer = false;
 let polite = true; // nur einer der Peers sollte "polite" sein
+let shouldReconnect = true; // default: reconnect is allowed
 
 
-    // Button-Handler für volle Breite
-    toggleBtn.onclick = () => {
-      full = !full;
-      if (full) {
-        localVideo.classList.add("fullwidth");
-        remoteVideo.classList.add("fullwidth");
-        toggleBtn.textContent = "ðŸ”™ normal";
-      } else {
-        localVideo.classList.remove("fullwidth");
-        remoteVideo.classList.remove("fullwidth");
-        toggleBtn.textContent = "ðŸ“º wide";
-      }
-    };
+// Button-Handler für volle Breite
+toggleBtn.onclick = () => {
+  full = !full;
+  if (full) {
+    localVideo.classList.add("fullwidth");
+    remoteVideo.classList.add("fullwidth");
+    toggleBtn.textContent = "ðŸ”™ normal";
+  } else {
+    localVideo.classList.remove("fullwidth");
+    remoteVideo.classList.remove("fullwidth");
+    toggleBtn.textContent = "ðŸ“º wide";
+  }
+};
 	
 // --- Login / Passwort-Logik ---
 async function login() {
@@ -350,7 +369,10 @@ function connectWebSocket() {
     }, reconnectInterval);
   };
 }
-connectWebSocket();
+
+if (shouldReconnect) {
+   connectWebSocket();
+}
 
 // --- ICE Server von Xirsys laden ---
 async function fetchIceServers() {
@@ -399,7 +421,6 @@ function setAudioTracks(enable) {
   }
 }
 
-
   
 // --- Nachrichten vom Server verarbeiten ---
 async function handleMessage(msg) {
@@ -430,8 +451,6 @@ async function handleMessage(msg) {
     // --- Statusmeldungen vom Server ---
     if (data.type === "senderStatus") {
       const senderBtn = document.getElementById("senderBtn");
-      window.senderActive = data.active;  // ?? global merken
-    
       if (data.active) {
         senderBtn.disabled = true;
         senderBtn.textContent = "sender (locked)";
@@ -439,9 +458,8 @@ async function handleMessage(msg) {
         senderBtn.disabled = false;
         senderBtn.textContent = "send";
       }
-      return;
+      return; // keine weitere Verarbeitung
     }
-
 
     // --- WebRTC Signalisierung ---
     if (data.sdp) {
@@ -456,12 +474,11 @@ async function handleMessage(msg) {
         const offerCollision =
           description.type === "offer" && !readyForOffer;
     
-        ignoreOffer = offerCollision;
-         if (ignoreOffer) {
-           console.warn("[DEBUG] Ignoring offer due to collision");
-           return;
-         }   
-		 
+        if (offerCollision) {
+          setInfoMsg("[DEBUG] Offer collision – ignoring");
+          return;
+        }
+    
         // Nur Answers setzen, wenn wir ein Local-Offer haben
         if (description.type === "answer" && pc.signalingState !== "have-local-offer") {
           console.warn("Answer ignored – wrong state:", pc.signalingState);
@@ -471,15 +488,17 @@ async function handleMessage(msg) {
         await pc.setRemoteDescription(description);
     
         if (description.type === "offer") {
-          setInfoMsg("creating answer");
+          setInfoMsg("received offer");
           await pc.setLocalDescription(await pc.createAnswer());
           ws.send(JSON.stringify({ sdp: pc.localDescription }));
         } else {
-          setInfoMsg("received answer");
+          setInfoMsg("received answer",description.type);
         }
     
       } catch (err) {
         console.error("setRemoteDescription error:", err);
+//		alert("setRemoteDescription error:", err);
+		stopAll();
       }
       return;
     }
@@ -498,7 +517,6 @@ async function handleMessage(msg) {
     console.error("handleMessage error:", err);
   }
 }
-
 
 let playPromise;
 
@@ -521,54 +539,42 @@ async function start(role) {
 
   setInfoMsg(`[DEBUG] Starte als ${role}`);
   myRole = role;
-
   if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: "register", role: myRole, roomId: ROOM_ID }));
+    ws.send(JSON.stringify({ type: 'register', role: myRole, roomId: ROOM_ID }));
   }
-
-  const senderBtn = document.getElementById("senderBtn");
-  const receiverBtn = document.getElementById("receiverBtn");
-  const stopBtn = document.getElementById("stopBtn");
-  document.getElementById("localVideo").srcObject = null;
-  document.getElementById("remoteVideo").srcObject = null;
-
+  const senderBtn = document.getElementById('senderBtn');
+  const receiverBtn = document.getElementById('receiverBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  document.getElementById('localVideo').srcObject = null;
+  document.getElementById('remoteVideo').srcObject = null;
   senderBtn.disabled = true;
   receiverBtn.disabled = true;
-  senderBtn.classList.remove("active");
-  receiverBtn.classList.remove("active");
+  senderBtn.classList.remove('active');
+  receiverBtn.classList.remove('active');
   senderBtn.textContent = "send";
   receiverBtn.textContent = "receive";
 
-  if (role === "sender") {
+  if (role === 'sender') { 
     setInfoMsg("start sender");
-    ws.send(JSON.stringify({ type: "senderStatus", active: true, roomId: ROOM_ID }));
+	ws.send(JSON.stringify({ type: "senderStatus", active: true, roomId: ROOM_ID }));
     ws.send(JSON.stringify({ type: "register", role: "sender", roomId: ROOM_ID }));
-    senderBtn.classList.add("active");
-    document.getElementById("localVideo").style.display = "block";
+    senderBtn.classList.add('active');
+    document.getElementById("localVideo").style.display = "block"; 
     document.getElementById("remoteVideo").style.display = "none";
     document.getElementById("remoteStatus").style.display = "none";
     document.getElementById("localStatus").style.display = "block";
   }
-  if (role === "receiver") {
+  if (role === 'receiver') {
     setInfoMsg("start receiver");
-    receiverBtn.classList.add("active");
+    receiverBtn.classList.add('active');
     document.getElementById("remoteVideo").style.display = "block";
     document.getElementById("localVideo").style.display = "none";
     document.getElementById("blackoutArea").style.display = "none";
     document.getElementById("localStatus").style.display = "none";
     document.getElementById("remoteStatus").style.display = "block";
   }
-
-  stopBtn.style.display = "block";
+  stopBtn.style.display = 'block';
   setAppState(ConnectionState.WAITING);
-
-  // --- Vorherige Verbindung schließen ---
-  if (pc) {
-    try {
-      pc.close();
-    } catch (e) {}
-    pc = null;
-  }
 
   // --- ICE Server laden ---
   let iceServers = [];
@@ -577,23 +583,14 @@ async function start(role) {
   } catch (e) {
     console.error("ICE Server fetch failed:", e);
   }
-
-  pc = new RTCPeerConnection({
-    iceServers: iceServers.length
-      ? iceServers
-      : [{ urls: "stun:stun.l.google.com:19302" }],
-  });
-
-  // --- Perfect Negotiation Pattern ---
-  makingOffer = false;
-  ignoreOffer = false;
+  
+  pc = new RTCPeerConnection({ iceServers: iceServers.length ? iceServers : [{ urls: "stun:stun.l.google.com:19302" }] });
 
   pc.onnegotiationneeded = async () => {
     try {
       makingOffer = true;
-      setInfoMsg("[DEBUG] negotiationneeded – creating offer");
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
+      setInfoMsg("negotiation needed");
+      await pc.setLocalDescription();
       ws.send(JSON.stringify({ sdp: pc.localDescription }));
     } catch (err) {
       console.error("onnegotiationneeded error:", err);
@@ -601,79 +598,69 @@ async function start(role) {
       makingOffer = false;
     }
   };
-  
+
   
   // --- Transceiver nur für Receiver ---
-  if (role === "receiver") {
-    setInfoMsg("[DEBUG] Receiver: adding recvonly transceivers");
+  if (role === 'receiver') {
+    startClocks(false);
+    setInfoMsg("Receiver: adding recvonly transceivers");
     pc.addTransceiver("audio", { direction: "recvonly" });
     pc.addTransceiver("video", { direction: "recvonly" });
   }
-
+  
   // --- Transceiver nur für Sender ---
-  if (role === "sender") {
-    setInfoMsg("[DEBUG] Sender: adding sendrecv transceivers");
+  if (role === 'sender') {
+    setInfoMsg("Sender: adding sendrecv transceivers");
     pc.addTransceiver("audio", { direction: "sendrecv" });
     pc.addTransceiver("video", { direction: "sendrecv" });
   }
 
   // --- Remote-Stream empfangen ---
-  pc.ontrack = (e) => {
-    setInfoMsg("[DEBUG] track received:", e.streams);
+  pc.ontrack = e => {
+    setInfoMsg("track received:", e.streams);
     if (remoteVideo.srcObject !== e.streams[0]) {
       remoteVideo.srcObject = e.streams[0];
     }
     safePlay(remoteVideo);
-    setInfoMsg("receiving");
   };
-
+  
   pc.onconnectionstatechange = () => {
     if (pc.connectionState === "connected") {
       const receivers = pc.getReceivers();
-      receivers.forEach((r) => {
+      receivers.forEach(r => {
         if (r.track && r.track.kind === "video") {
           const remoteVideo = document.getElementById("remoteVideo");
           if (remoteVideo.srcObject !== new MediaStream([r.track])) {
-            console.log("Rebinding remote video track");
+            setInfoMsg("rebinding remote video track");
             remoteVideo.srcObject = new MediaStream([r.track]);
           }
         }
       });
     }
   };
-
-  pc.onicecandidate = (e) => {
-    if (e.candidate) ws.send(JSON.stringify({ candidate: e.candidate }));
-  };
-
+ 
+  pc.onicecandidate = e => { if (e.candidate) ws.send(JSON.stringify({ candidate: e.candidate })); };
   pc.oniceconnectionstatechange = () => {
-    setInfoMsg("[DEBUG] ICE state:", pc.iceConnectionState);
-    if (["disconnected", "failed"].includes(pc.iceConnectionState)) {
-      setAppState(ConnectionState.ERROR);
-      attemptReconnectWithDelay(5);
+    setInfoMsg("ICE state:", pc.iceConnectionState);
+    if (['disconnected','failed'].includes(pc.iceConnectionState)) {
+      setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(2);
     }
-    if (["connected"].includes(pc.iceConnectionState)) {
+    if (['connected'].includes(pc.iceConnectionState)) {
       setAppState(ConnectionState.CONNECTED);
     }
   };
 
-  if (role === "sender") {
-    const select = document.getElementById("cameraSelect");
-    select.style.display = "block";
+  if (role === 'sender') {
+    startClocks(true);
+    const select = document.getElementById('cameraSelect');
+    select.style.display = 'block';
     await fillCameraSelect();
-    await startLocalStream();
-    setInfoMsg("sending");
-    select.onchange = () => setAppState(ConnectionState.IDLE);
-
-    // Audio-Button automatisch klicken, wenn Sender startet
-    document.getElementById("audioBtn").click();
+	await startLocalStream();
+	select.onchange = () => setAppState(ConnectionState.IDLE);
+	// disable audio per default
+	document.getElementById("audioBtn").click();
   }
 }
-
-
-
-
-
 
 async function fillCameraSelect() {
   try {
@@ -689,7 +676,7 @@ async function fillCameraSelect() {
        videoDevices.forEach((device, i) => {
          const opt = document.createElement("option");
          opt.value = device.deviceId;
-         opt.textContent = device.label || `Kamera ${i+1}`;
+         opt.textContent = device.label || `Camera ${i+1}`;
          select.appendChild(opt);
        });
 	   
@@ -707,8 +694,8 @@ async function fillCameraSelect() {
 
   } catch (err) {
     console.error("fillCameraSelect error:", err);
-    alert("Device in use");
-    setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(5);
+    alert("device in use");
+    setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(2);
   }
 }
 
@@ -725,7 +712,7 @@ async function startLocalStream() {
   } catch (err) {
     console.error("startLocalStream error:", err);
     alert("Device in use");
-    setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(5);
+    setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(2);
   }
 }
 
@@ -744,12 +731,11 @@ async function startLocalStreamAndOffer() {
       audio: audioSetting
     });
 
-    // --- VideoTrack ersetzen oder hinzufügen ---
+    // --- VideoTrack AudioTrack ersetzen oder hinzufügen ---
     if (pc) {
       const videoSender = pc.getSenders().find(s => s.track && s.track.kind === "video");
       const newVideoTrack = newStream.getVideoTracks()[0];
-
-      if (videoSender) {
+      if (videoSender && newVideoTrack) {
         await videoSender.replaceTrack(newVideoTrack);
       } else {
         // Kein Sender vorhanden ? Track hinzufügen (löst onnegotiationneeded aus)
@@ -783,7 +769,7 @@ setInfoMsg("Camera/Audio updated successfully");
 
 // Trick: Negotiation anstoßen, wenn nötig
 if (pc) {
-  setInfoMsg("[DEBUG] Forcing negotiation after camera change");
+  setInfoMsg("Forcing negotiation after camera change");
   pc.dispatchEvent(new Event("negotiationneeded"));
 }
 	
@@ -802,81 +788,156 @@ function disableAudio() {
   document.getElementById('audioBtn').textContent = 'audio on';
 }
 
-
-function stopAll() {
-  setInfoMsg("stopAll");
+function stopApp() {
+  setInfoMsg("stop App completely");
   setAppState(ConnectionState.IDLE);
-  localOfferSent = false;
-
+  // Disable reconnects
+  shouldReconnect = false;
+  
   if (myRole === "sender") {
+    localOfferSent = false;
     ws.send(JSON.stringify({ type: "senderStatus", active: false, roomId: ROOM_ID }));
   }
 
-  // --- Verbindung sauber schließen ---
-  if (pc) {
-    try {
+  myRole = null;
+  if (pc) { pc.close(); pc = null; }
+  if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+  document.getElementById('senderBtn').disabled = false;
+  document.getElementById('receiverBtn').disabled = false;
+  document.getElementById('senderBtn').classList.remove('active');
+  document.getElementById('receiverBtn').classList.remove('active');
+  document.getElementById('stopBtn').style.display = 'none';
+  document.getElementById('cameraSelect').style.display = 'none';
+  document.getElementById('localVideo').srcObject = null;
+  document.getElementById('remoteVideo').srcObject = null;
+  document.getElementById('blackoutArea').style.display = 'none';
+ 
+  stopAll();
+
+  // PeerConnection cleanup
+  try {
+    if (window.pc) {
       pc.getSenders().forEach(sender => {
         try {
-          if (sender.track) sender.track.stop();
-        } catch (e) {}
+          sender.track?.stop();
+        } catch {}
       });
       pc.close();
-    } catch (e) {
-      console.warn("Error closing pc:", e);
+      window.pc = null;
+      setInfoMsg("PeerConnection closed");
     }
-    pc = null;
+
+    // WebSocket cleanup
+    if (window.ws) {
+      ws.onclose = null; // prevent reconnect handler
+      ws.close();
+      ws = null;
+      setInfoMsg("WebSocket closed");
+    }
+
+    // Clear UI
+    const localVideo = document.getElementById("localVideo");
+    if (localVideo) localVideo.srcObject = null;
+
+    const remoteVideo = document.getElementById("remoteVideo");
+    if (remoteVideo) remoteVideo.srcObject = null;
+    setInfoMsg("app stopped");
+  } catch (err) {
+    console.error("stopApp error:", err);
   }
-
-  // --- Lokalen Stream beenden ---
-  if (localStream) {
-    try {
-      localStream.getTracks().forEach(t => t.stop());
-    } catch (e) {}
-    localStream = null;
-  }
-
-  // --- Flags zurücksetzen (Perfect Negotiation Pattern) ---
-  makingOffer = false;
-  ignoreOffer = false;
-
-  // --- Buttons zurücksetzen ---
-  const senderBtn = document.getElementById("senderBtn");
-  const receiverBtn = document.getElementById("receiverBtn");
-
-  senderBtn.disabled = false;
-  receiverBtn.disabled = false;
-  senderBtn.classList.remove("active");
-  receiverBtn.classList.remove("active");
-
-  document.getElementById("stopBtn").style.display = "none";
-  document.getElementById("cameraSelect").style.display = "none";
-  document.getElementById("blackoutArea").style.display = "none";
-
-  // falls Sender noch aktiv? -> send-Button gesperrt lassen
-  if (window.senderActive) {
-    senderBtn.disabled = true;
-    senderBtn.textContent = "sender (locked)";
-  } else {
-    senderBtn.textContent = "send";
-  }
-
-  // Remote/Local Video zurücksetzen
-  document.getElementById("localVideo").srcObject = null;
-  document.getElementById("remoteVideo").srcObject = null;
 }
 
 
+async function stopAll() {
+  try {
+    // Stop *all* media devices
+    setInfoMsg(`stopAll streams`);
+    const stopTracks = stream => {
+      if (!stream) return;
+      stream.getTracks().forEach(track => {
+        try {
+          track.stop();
+          setInfoMsg(`stopped ${track.kind} track`);
+        } catch (e) {
+          console.warn("track stop error:", e);
+        }
+      });
+    };
+
+    // Local stream
+    if (window.localStream) {
+      stopTracks(window.localStream);
+      window.localStream = null;
+    }
+
+    // Remote video stream
+    if (window.remoteVideo && window.remoteVideo.srcObject) {
+      stopTracks(window.remoteVideo.srcObject);
+      window.remoteVideo.srcObject = null;
+    }
+  } catch (err) {
+    console.error("stopAll error:", err);
+  }
+}
 
 
 function attemptReconnectWithDelay(seconds) {
-  setInfoMsg("try reconnect");
-  setTimeout(() => {
-    if (!pc || pc.iceConnectionState === 'disconnected') {
-      setInfoMsg("[DEBUG] try to reconnect");
-      stopAll(); if (myRole) start(myRole);
-    }
-  }, seconds * 1000);
+  if (shouldReconnect) {
+    setInfoMsg("try reconnect");
+    setTimeout(() => {
+      if (!pc || pc.iceConnectionState === 'disconnected') {
+        setInfoMsg("try to reconnect");
+        stopAll();
+		if (myRole) start(myRole);
+      }
+    }, seconds * 1000);
+  } else {
+      setInfoMsg("stopped reconnect");
+  }
 }
+
+ws.onclose = () => {
+  if (shouldReconnect) {
+    console.log("WS trying to reconnect…");
+    setTimeout(connectWebSocket, 2000);
+  }
+};
+
+function formatClock(date) {
+  const h = date.getHours().toString().padStart(2, "0");
+  const m = date.getMinutes().toString().padStart(2, "0");
+  const s = date.getSeconds().toString().padStart(2, "0");
+  return `${h}:${m}:${s}`;
+}
+
+function formatClock(date) {
+  const h = date.getHours().toString().padStart(2, "0");
+  const m = date.getMinutes().toString().padStart(2, "0");
+  const s = date.getSeconds().toString().padStart(2, "0");
+  return `${h}:${m}:${s}`;
+}
+
+function startClocks(isSender) {
+  const localClock = document.getElementById("localClock");
+  const remoteClock = document.getElementById("remoteClock");
+
+  // Sichtbarkeit einstellen
+  if (isSender) {
+    localClock.style.display = "block";   // lokale Uhr einblenden
+    remoteClock.style.display = "none";   // remote Uhr ausblenden
+  } else {
+    localClock.style.display = "none";    // lokale Uhr ausblenden
+    remoteClock.style.display = "block";  // remote Uhr einblenden
+  }
+
+  // Uhrzeit-Update
+  setInterval(() => {
+    const now = new Date();
+    localClock.textContent = formatClock(now);
+    remoteClock.textContent = formatClock(now);
+  }, 1000);
+}
+
 
 // Passwort anzeigen, wenn auf das App-Icon geklickt wird
 //document.addEventListener("DOMContentLoaded", () => {

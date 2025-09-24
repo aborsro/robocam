@@ -151,7 +151,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v70
+   <span>robocam</span>v71
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -565,21 +565,19 @@ async function start(role) {
   
   pc = new RTCPeerConnection({ iceServers: iceServers.length ? iceServers : [{ urls: "stun:stun.l.google.com:19302" }] });
 
+  pc.onnegotiationneeded = async () => {
+    try {
+      makingOffer = true;
+      setInfoMsg("[DEBUG] Negotiation needed – creating offer");
+      await pc.setLocalDescription();
+      ws.send(JSON.stringify({ sdp: pc.localDescription }));
+    } catch (err) {
+      console.error("onnegotiationneeded error:", err);
+    } finally {
+      makingOffer = false;
+    }
+  };
 
-pc.onnegotiationneeded = async () => {
-  try {
-    makingOffer = true;
-    setInfoMsg("[DEBUG] Negotiation needed – creating offer");
-    await pc.setLocalDescription();
-    ws.send(JSON.stringify({ sdp: pc.localDescription }));
-  } catch (err) {
-    console.error("onnegotiationneeded error:", err);
-  } finally {
-    makingOffer = false;
-  }
-};
-
-  
   // --- Transceiver nur für Receiver ---
   if (role === 'receiver') {
     setInfoMsg("[DEBUG] Receiver: adding recvonly transceivers");
@@ -638,7 +636,7 @@ pc.onnegotiationneeded = async () => {
     setInfoMsg("sending");
 	select.onchange = () => setAppState(ConnectionState.IDLE);
     // Audio-Button automatisch klicken, wenn Sender startet
-    document.getElementById("audioBtn").click();
+    //document.getElementById("audioBtn").click();
   }
 }
 

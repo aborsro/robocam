@@ -151,7 +151,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v51
+   <span>robocam</span>v70
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -195,19 +195,19 @@ let makingOffer = false;
 let polite = true; // nur einer der Peers sollte "polite" sein
 
 
-    // Button-Handler für volle Breite
-    toggleBtn.onclick = () => {
-      full = !full;
-      if (full) {
-        localVideo.classList.add("fullwidth");
-        remoteVideo.classList.add("fullwidth");
-        toggleBtn.textContent = "ðŸ”™ normal";
-      } else {
-        localVideo.classList.remove("fullwidth");
-        remoteVideo.classList.remove("fullwidth");
-        toggleBtn.textContent = "ðŸ“º wide";
-      }
-    };
+// Button-Handler für volle Breite
+toggleBtn.onclick = () => {
+  full = !full;
+  if (full) {
+    localVideo.classList.add("fullwidth");
+    remoteVideo.classList.add("fullwidth");
+    toggleBtn.textContent = "ðŸ”™ normal";
+  } else {
+    localVideo.classList.remove("fullwidth");
+    remoteVideo.classList.remove("fullwidth");
+    toggleBtn.textContent = "ðŸ“º wide";
+  }
+};
 	
 // --- Login / Passwort-Logik ---
 async function login() {
@@ -583,15 +583,15 @@ pc.onnegotiationneeded = async () => {
   // --- Transceiver nur für Receiver ---
   if (role === 'receiver') {
     setInfoMsg("[DEBUG] Receiver: adding recvonly transceivers");
-    pc.addTransceiver("audio", { direction: "recvonly" });
     pc.addTransceiver("video", { direction: "recvonly" });
+    pc.addTransceiver("audio", { direction: "recvonly" });
   }
   
   // --- Transceiver nur für Sender ---
   if (role === 'sender') {
     setInfoMsg("[DEBUG] Sender: adding sendrecv transceivers");
-    pc.addTransceiver("audio", { direction: "sendrecv" });
     pc.addTransceiver("video", { direction: "sendrecv" });
+    pc.addTransceiver("audio", { direction: "sendrecv" });
   }
 
   // --- Remote-Stream empfangen ---

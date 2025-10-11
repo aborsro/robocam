@@ -171,7 +171,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v73
+   <span>robocam</span>v72
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -422,46 +422,74 @@ function setAudioTracks(enable) {
 }
 
   
-// Queue for ICE candidates that arrive early
-let pendingCandidates = [];
-
+// --- Nachrichten vom Server verarbeiten ---
 async function handleMessage(msg) {
   try {
-    let text = msg.data instanceof Blob ? await msg.data.text() : msg.data;
+    // --- Blob oder String in Text umwandeln ---
+    let text;
+    if (msg.data instanceof Blob) {
+      text = await msg.data.text();
+    } else {
+      text = msg.data;
+    }
+
+    // --- JSON parsen ---
     let data;
-    try { data = JSON.parse(text); } 
-    catch (err) { console.error("JSON parse error:", err, text); return; }
+    try {
+      data = JSON.parse(text);
+    } catch (err) {
+      console.error("JSON parse error:", err, text);
+      return;
+    }
+  
+    if (data.type === "error") {
+      alert(data.message);
+      stopAll();
+	  return;
+    }
+	
+    // --- Statusmeldungen vom Server ---
+    if (data.type === "senderStatus") {
+      const senderBtn = document.getElementById("senderBtn");
+      window.senderActive = data.active;  // ?? global merken
+    
+      if (data.active) {
+        senderBtn.disabled = true;
+        senderBtn.textContent = "sender (locked)";
+      } else {
+        senderBtn.disabled = false;
+        senderBtn.textContent = "send";
+      }
+      return;
+    }
 
-    if (data.type === "error") { alert(data.message); stopAll(); return; }
 
-    // --- Handle SDP offers/answers ---
+    // --- WebRTC Signalisierung ---
     if (data.sdp) {
       if (!pc) return;
       try {
         const description = new RTCSessionDescription(data.sdp);
-
-        // --- Avoid offer collisions ---
-        const readyForOffer = !makingOffer && (pc.signalingState === "stable" || polite);
-        const offerCollision = description.type === "offer" && !readyForOffer;
+    
+        const readyForOffer =
+          !makingOffer &&
+          (pc.signalingState === "stable" || polite);
+    
+        const offerCollision =
+          description.type === "offer" && !readyForOffer;
+    
         if (offerCollision) {
           setInfoMsg("[DEBUG] Offer collision – ignoring");
           return;
         }
-
+    
+        // Nur Answers setzen, wenn wir ein Local-Offer haben
         if (description.type === "answer" && pc.signalingState !== "have-local-offer") {
           console.warn("Answer ignored – wrong state:", pc.signalingState);
           return;
         }
-
+    
         await pc.setRemoteDescription(description);
-
-        // --- Flush queued ICE candidates ---
-        while (pendingCandidates.length) {
-          const cand = pendingCandidates.shift();
-          try { await pc.addIceCandidate(cand); } 
-          catch(err){ console.error("Queued addIceCandidate error:", err); }
-        }
-
+    
         if (description.type === "offer") {
           setInfoMsg("creating answer");
           await pc.setLocalDescription(await pc.createAnswer());
@@ -469,35 +497,26 @@ async function handleMessage(msg) {
         } else {
           setInfoMsg("received answer");
         }
-
-      } catch (err) { console.error("setRemoteDescription error:", err); }
-      return;
-    }
-
-    // --- Handle ICE candidates ---
-    if (data.candidate) {
-      if (!pc) return;
-      const candidate = new RTCIceCandidate(data.candidate);
-
-      if (!pc.remoteDescription || !pc.remoteDescription.type) {
-        // Queue ICE candidate until remote description is set
-        pendingCandidates.push(candidate);
-        setInfoMsg("[DEBUG] ICE candidate queued, waiting for remote description");
-      } else {
-        try { await pc.addIceCandidate(candidate); }
-        catch (err) {
-          console.error("addIceCandidate error:", err);
-          // Retry after a short delay if it fails
-          setTimeout(async () => {
-            try { await pc.addIceCandidate(candidate); }
-            catch(err){ console.error("Retry addIceCandidate failed:", err); }
-          }, 500);
-        }
+    
+      } catch (err) {
+        console.error("setRemoteDescription error:", err);
       }
       return;
     }
 
-  } catch (err) { console.error("handleMessage error:", err); }
+    if (data.candidate) {
+      if (!pc) return;
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+      } catch (err) {
+        console.error("addIceCandidate error:", err);
+      }
+      return;
+    }
+
+  } catch (err) {
+    console.error("handleMessage error:", err);
+  }
 }
 
 let playPromise;
@@ -540,19 +559,20 @@ async function start(role) {
                     else { startReceiver(); }
   }
   
+  
 async function startSender() {
-  setInfoMsg("start sender");
 
-  ws.send(JSON.stringify({ type: "senderStatus", active: true, roomId: ROOM_ID }));
-  ws.send(JSON.stringify({ type: "register", role: "sender", roomId: ROOM_ID }));
+    setInfoMsg("start sender");
+	ws.send(JSON.stringify({ type: "senderStatus", active: true, roomId: ROOM_ID }));
+    ws.send(JSON.stringify({ type: "register", role: "sender", roomId: ROOM_ID }));
+    senderBtn.classList.add('active');
+    document.getElementById("localVideo").style.display = "block"; 
+    document.getElementById("remoteVideo").style.display = "none";
+    document.getElementById("remoteStatus").style.display = "none";
+    document.getElementById("localStatus").style.display = "block";
 
-  senderBtn.classList.add('active');
-  document.getElementById("localVideo").style.display = "block";
-  document.getElementById("remoteVideo").style.display = "none";
-  document.getElementById("remoteStatus").style.display = "none";
-  document.getElementById("localStatus").style.display = "block";
+
   stopBtn.style.display = 'block';
-
   setAppState(ConnectionState.WAITING);
 
   // --- ICE Server laden ---
@@ -562,20 +582,8 @@ async function startSender() {
   } catch (e) {
     console.error("ICE Server fetch failed:", e);
   }
-
+  
   pc = new RTCPeerConnection({ iceServers: iceServers.length ? iceServers : [{ urls: "stun:stun.l.google.com:19302" }] });
-
-  // --- Transceiver für Sender ---
-  pc.addTransceiver("video", { direction: "sendrecv" });
-  pc.addTransceiver("audio", { direction: "sendrecv" });
-
-  // --- ICE / Connection events ---
-  pc.onicecandidate = e => { if (e.candidate) ws.send(JSON.stringify({ candidate: e.candidate })); };
-  pc.oniceconnectionstatechange = () => {
-    setInfoMsg("[DEBUG] ICE state: " + pc.iceConnectionState);
-    if (['disconnected','failed'].includes(pc.iceConnectionState)) setAppState(ConnectionState.ERROR);
-    if (['connected'].includes(pc.iceConnectionState)) setAppState(ConnectionState.CONNECTED);
-  };
 
   pc.onnegotiationneeded = async () => {
     try {
@@ -590,39 +598,51 @@ async function startSender() {
     }
   };
 
-  // --- Remote video binding (optional, just in case) ---
+  
+  // --- Transceiver nur für Sender ---
+
+    setInfoMsg("[DEBUG] Sender: adding sendrecv transceivers");
+    pc.addTransceiver("video", { direction: "sendrecv" });
+    pc.addTransceiver("audio", { direction: "sendrecv" });
+
+
   pc.onconnectionstatechange = () => {
     if (pc.connectionState === "connected") {
       const receivers = pc.getReceivers();
       receivers.forEach(r => {
         if (r.track && r.track.kind === "video") {
+          const remoteVideo = document.getElementById("remoteVideo");
           if (remoteVideo.srcObject !== new MediaStream([r.track])) {
+            console.log("Rebinding remote video track");
             remoteVideo.srcObject = new MediaStream([r.track]);
           }
         }
       });
     }
   };
-
-  // --- Fill camera list once ---
-  if (!fillCameraSelectDone) await fillCameraSelect();
-
-  // --- Start local stream once ---
-  if (!localStream) {
-    await startLocalStream();  // This sets `localStream` and attaches it to video
-  } else {
-    localVideo.srcObject = localStream; // reuse existing stream
-    try { await localVideo.play(); } catch(e){ console.warn(e); }
-  }
-
-  const select = document.getElementById('cameraSelect');
-  select.style.display = 'block';
-  select.onchange = async () => {
-    lastCameraId = select.value;
-    await startLocalStreamAndOffer();  // replace track only, no new getUserMedia call
-  };
-}
  
+  pc.onicecandidate = e => { if (e.candidate) ws.send(JSON.stringify({ candidate: e.candidate })); };
+  pc.oniceconnectionstatechange = () => {
+    setInfoMsg("[DEBUG] ICE state:", pc.iceConnectionState);
+    if (['disconnected','failed'].includes(pc.iceConnectionState)) {
+      setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(5);
+    }
+    if (['connected'].includes(pc.iceConnectionState)) {
+      setAppState(ConnectionState.CONNECTED);
+    }
+  };
+
+
+    const select = document.getElementById('cameraSelect');
+    select.style.display = 'block';
+    await fillCameraSelect();
+	await startLocalStream();
+    setInfoMsg("sending");
+	select.onchange = () => setAppState(ConnectionState.IDLE);
+    // Audio-Button automatisch klicken, wenn Sender startet
+    //document.getElementById("audioBtn").click();
+
+}
 
  async function startReceiver() {
 
@@ -771,36 +791,61 @@ async function startLocalStreamAndOffer() {
     const select = document.getElementById('cameraSelect');
     const videoConstraints = select.value ? { deviceId: { exact: select.value } } : true;
 
+    // --- Neuen Stream holen ---
     const newStream = await navigator.mediaDevices.getUserMedia({
       video: videoConstraints,
       audio: audioSetting
     });
 
+    // --- VideoTrack ersetzen oder hinzufügen ---
     if (pc) {
-      const videoSender = pc.getSenders().find(s => s.track?.kind === "video");
-      const audioSender = pc.getSenders().find(s => s.track?.kind === "audio");
+      const videoSender = pc.getSenders().find(s => s.track && s.track.kind === "video");
+      const newVideoTrack = newStream.getVideoTracks()[0];
 
-      if (videoSender) videoSender.replaceTrack(newStream.getVideoTracks()[0]);
-      else pc.addTrack(newStream.getVideoTracks()[0], newStream);
+      if (videoSender) {
+        await videoSender.replaceTrack(newVideoTrack);
+      } else {
+        // Kein Sender vorhanden ? Track hinzufügen (löst onnegotiationneeded aus)
+        pc.addTrack(newVideoTrack, newStream);
+      }
 
-      if (audioSender && newStream.getAudioTracks()[0]) audioSender.replaceTrack(newStream.getAudioTracks()[0]);
-      else if (newStream.getAudioTracks()[0]) pc.addTrack(newStream.getAudioTracks()[0], newStream);
-
-      pc.dispatchEvent(new Event("negotiationneeded"));
+      // --- AudioTrack ersetzen oder hinzufügen ---
+      const audioSender = pc.getSenders().find(s => s.track && s.track.kind === "audio");
+      const newAudioTrack = newStream.getAudioTracks()[0];
+      if (audioSender && newAudioTrack) {
+        await audioSender.replaceTrack(newAudioTrack);
+      } else if (newAudioTrack) {
+        pc.addTrack(newAudioTrack, newStream);
+      }
     }
 
-    if (localStream) localStream.getTracks().forEach(t => t.stop());
-    localStream = newStream;
+    // --- Lokales Video setzen ---
     localVideo.srcObject = newStream;
-    await localVideo.play();
+    try { await localVideo.play(); } catch (err) { console.warn("localVideo play error:", err); }
+
+    // --- Alten Stream stoppen ---
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+    }
+    localStream = newStream;
 
     setInfoMsg("Camera/Audio updated successfully");
+	
+// --- nach Kamerawechsel nur Track ersetzen ---
+setInfoMsg("Camera/Audio updated successfully");
+
+// Trick: Negotiation anstoßen, wenn nötig
+if (pc) {
+  setInfoMsg("[DEBUG] Forcing negotiation after camera change");
+  pc.dispatchEvent(new Event("negotiationneeded"));
+}
+	
+
   } catch (err) {
     console.error("startLocalStreamAndOffer error:", err);
     alert("Cam/Mic access not granted or available");
   }
 }
-
 
 
 function disableAudio() {
@@ -814,10 +859,8 @@ function disableAudio() {
 function stopAll() {
   setInfoMsg("stopAll");
   setAppState(ConnectionState.IDLE);
-
   localOfferSent = false;
-  pendingCandidates = [];
-
+  
   if (myRole === "sender") {
     ws.send(JSON.stringify({ type: "senderStatus", active: false, roomId: ROOM_ID }));
   }
@@ -825,21 +868,24 @@ function stopAll() {
   if (pc) { pc.close(); pc = null; }
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
 
-  document.getElementById('senderBtn').disabled = false;
-  document.getElementById('receiverBtn').disabled = false;
-  document.getElementById('senderBtn').classList.remove('active');
-  const led = document.getElementById('receiverBtn').querySelector('.led');
-  if (led) led.classList.remove('on');
+  const senderBtn = document.getElementById('senderBtn');
+  const receiverBtn = document.getElementById('receiverBtn');
+
+  senderBtn.disabled = false;
+  receiverBtn.disabled = false;
+  senderBtn.classList.remove('active');
+const led = receiverBtn.querySelector('.led');
+if (led) led.classList.remove('on'); // LED ausschalten
   document.getElementById('stopBtn').style.display = 'none';
   document.getElementById('cameraSelect').style.display = 'none';
   document.getElementById('blackoutArea').style.display = 'none';
 
+  // hier prüfen ob Sender aktiv ist
   if (window.senderActive) {
-    document.getElementById('senderBtn').disabled = true;
-    document.getElementById('senderBtn').textContent = "sender (locked)";
+    senderBtn.disabled = true;
+    senderBtn.textContent = "sender (locked)";
   }
 }
-
 
 
 function attemptReconnectWithDelay(seconds) {

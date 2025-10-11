@@ -171,7 +171,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v72
+   <span>robocam</span>v73
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -434,20 +434,13 @@ async function handleMessage(msg) {
 
     if (data.type === "error") { alert(data.message); stopAll(); return; }
 
-    if (data.type === "senderStatus") {
-      const senderBtn = document.getElementById("senderBtn");
-      window.senderActive = data.active;
-      senderBtn.disabled = data.active;
-      senderBtn.textContent = data.active ? "sender (locked)" : "send";
-      return;
-    }
-
+    // --- Handle SDP offers/answers ---
     if (data.sdp) {
       if (!pc) return;
       try {
         const description = new RTCSessionDescription(data.sdp);
 
-        // Avoid offer collisions
+        // --- Avoid offer collisions ---
         const readyForOffer = !makingOffer && (pc.signalingState === "stable" || polite);
         const offerCollision = description.type === "offer" && !readyForOffer;
         if (offerCollision) {
@@ -462,12 +455,12 @@ async function handleMessage(msg) {
 
         await pc.setRemoteDescription(description);
 
-        // Flush queued ICE candidates
-        for (const cand of pendingCandidates) {
+        // --- Flush queued ICE candidates ---
+        while (pendingCandidates.length) {
+          const cand = pendingCandidates.shift();
           try { await pc.addIceCandidate(cand); } 
           catch(err){ console.error("Queued addIceCandidate error:", err); }
         }
-        pendingCandidates = [];
 
         if (description.type === "offer") {
           setInfoMsg("creating answer");
@@ -481,23 +474,31 @@ async function handleMessage(msg) {
       return;
     }
 
+    // --- Handle ICE candidates ---
     if (data.candidate) {
       if (!pc) return;
       const candidate = new RTCIceCandidate(data.candidate);
-      if (!pc.remoteDescription || pc.remoteDescription.type === null) {
+
+      if (!pc.remoteDescription || !pc.remoteDescription.type) {
+        // Queue ICE candidate until remote description is set
         pendingCandidates.push(candidate);
         setInfoMsg("[DEBUG] ICE candidate queued, waiting for remote description");
       } else {
         try { await pc.addIceCandidate(candidate); }
-        catch (err) { console.error("addIceCandidate error:", err); }
+        catch (err) {
+          console.error("addIceCandidate error:", err);
+          // Retry after a short delay if it fails
+          setTimeout(async () => {
+            try { await pc.addIceCandidate(candidate); }
+            catch(err){ console.error("Retry addIceCandidate failed:", err); }
+          }, 500);
+        }
       }
       return;
     }
 
   } catch (err) { console.error("handleMessage error:", err); }
 }
-
- 
 
 let playPromise;
 

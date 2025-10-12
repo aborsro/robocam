@@ -171,7 +171,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v72
+   <span>robocam</span>v74
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -712,6 +712,8 @@ async function startSender() {
   };
 }
 
+let getUserMediaDone = false;
+
 // --- unified helper ---
 async function getLocalStreamOnce() {
   if (localStream) return localStream; // reuse existing
@@ -720,14 +722,15 @@ async function getLocalStreamOnce() {
     video: true,
     audio: audioSetting
   });
+  getUserMediaDone = true;
   return localStream;
 }
 
 // --- fill camera selector, no camera open here ---
 async function fillCameraSelect() {
   try {
+    if (!getUserMediaDone) return;
     if (fillCameraSelectDone) return;
-    fillCameraSelectDone = true;
     setInfoMsg("fillCameraSelect");
 
     // Use enumerateDevices() directly — no need to call getUserMedia here
@@ -750,6 +753,7 @@ async function fillCameraSelect() {
     };
 
     if (lastCameraId) select.value = lastCameraId;
+	fillCameraSelectDone = true;
   } catch (err) {
     console.error("fillCameraSelect error:", err);
     alert("Device in use");

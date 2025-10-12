@@ -465,44 +465,56 @@ async function handleMessage(msg) {
 
 
     // --- WebRTC Signalisierung ---
-    if (data.sdp) {
-      if (!pc) return;
-      try {
-        const description = new RTCSessionDescription(data.sdp);
-    
-        const readyForOffer =
-          !makingOffer &&
-          (pc.signalingState === "stable" || polite);
-    
-        const offerCollision =
-          description.type === "offer" && !readyForOffer;
-    
-        if (offerCollision) {
-          setInfoMsg("[DEBUG] Offer collision – ignoring");
-          return;
-        }
-    
-        // Nur Answers setzen, wenn wir ein Local-Offer haben
-        if (description.type === "answer" && pc.signalingState !== "have-local-offer") {
-          console.warn("Answer ignored – wrong state:", pc.signalingState);
-          return;
-        }
-    
-        await pc.setRemoteDescription(description);
-    
-        if (description.type === "offer") {
-          setInfoMsg("creating answer");
-          await pc.setLocalDescription(await pc.createAnswer());
-          ws.send(JSON.stringify({ sdp: pc.localDescription }));
-        } else {
-          setInfoMsg("received answer");
-        }
-    
-      } catch (err) {
-        console.error("setRemoteDescription error:", err);
+if (data.sdp) {
+  if (!pc) return;
+  try {
+    const description = new RTCSessionDescription(data.sdp);
+    const isOffer = description.type === "offer";
+    // Offer-Collision erkennen: remote offer + wir machen gerade ein offer ODER signalingState != stable
+    const offerCollision = isOffer && (makingOffer || pc.signalingState !== "stable");
+
+    if (offerCollision) {
+      if (!polite) {
+        // Wenn impolite: ignorieren wir das hereinkommende offer
+        setInfoMsg("[DEBUG] Offer collision - ignoring (impolite)");
+        return;
       }
+      // Wenn polite: rollback des lokalen offers bevor wir remote setzen
+      setInfoMsg("[DEBUG] Offer collision - polite peer: rollback local offer");
+      try {
+        await pc.setLocalDescription({ type: "rollback" });
+      } catch (rbErr) {
+        console.warn("Rollback failed (might be ok):", rbErr);
+      }
+    }
+
+    // Wenn es eine Antwort ist: vergewissere dich, dass wir ein local offer hatten
+    if (description.type === "answer") {
+      if (pc.signalingState !== "have-local-offer") {
+        console.warn("Answer ignored – wrong signaling state:", pc.signalingState);
+        return;
+      }
+      await pc.setRemoteDescription(description);
+      setInfoMsg("received answer");
       return;
     }
+
+    // Für eingehende Offer (nach evtl. Rollback)
+    if (description.type === "offer") {
+      await pc.setRemoteDescription(description);
+      setInfoMsg("creating answer");
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      ws.send(JSON.stringify({ sdp: pc.localDescription }));
+      return;
+    }
+
+  } catch (err) {
+    console.error("setRemoteDescription error:", err);
+  }
+  return;
+}
+
 
     if (data.candidate) {
       if (!pc) return;
@@ -585,11 +597,15 @@ async function startSender() {
   
   pc = new RTCPeerConnection({ iceServers: iceServers.length ? iceServers : [{ urls: "stun:stun.l.google.com:19302" }] });
 
+
+  
+  // --- onnegotiationneeded: create explicit offer ---
   pc.onnegotiationneeded = async () => {
     try {
       makingOffer = true;
       setInfoMsg("[DEBUG] Negotiation needed – creating offer");
-      await pc.setLocalDescription();
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
       ws.send(JSON.stringify({ sdp: pc.localDescription }));
     } catch (err) {
       console.error("onnegotiationneeded error:", err);

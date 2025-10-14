@@ -171,7 +171,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v74
+   <span>robocam</span>v75
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -207,8 +207,8 @@ video {
 const localVideo = document.getElementById("localVideo");
 const remoteVideo = document.getElementById("remoteVideo");
 const toggleBtn = document.getElementById("toggleSizeBtn");
-let pc;
-let ws;
+let pc = null;
+
 let role; // "sender" oder "receiver"
 let full = false;
 let idleRestartTimer = null;
@@ -216,6 +216,13 @@ let isNegotiating = false;
 let makingOffer = false;
 let polite = true; // nur einer der Peers sollte "polite" sein
 
+let stopRequested = false;
+let reconnectTimer = null;
+let reconnectInProgress = false;
+let ws = null;
+
+// Button-Handler für volle Breite
+connectWebSocket(); 
 
 // Button-Handler für volle Breite
 toggleBtn.onclick = () => {
@@ -286,7 +293,7 @@ setInfoMsg("[DEBUG] Initialising ROBOCAM App");
 
 const ConnectionState = {
   IDLE: 'idle', WAITING: 'waiting', READY: 'ready',
-  CONNECTING: 'connecting', CONNECTED: 'connected', ERROR: 'error',
+  CONNECTING: 'connecting',RECONNECTING: 'try reconnecting', CONNECTED: 'connected', ERROR: 'error',
 };
 let appState = ConnectionState.IDLE;
 
@@ -341,38 +348,87 @@ document.getElementById('localVideo').style.display = 'none';
 document.getElementById("localStatus").style.display = "none";
 document.getElementById("remoteStatus").style.display = "none";
 
+function waitForWebSocketOpen(wsInstance, timeout = 5000) {
+  return new Promise((resolve, reject) => {
+    if (!wsInstance) return reject("WebSocket is null");
+    if (wsInstance.readyState === WebSocket.OPEN) return resolve();
+    if (wsInstance.readyState === WebSocket.CLOSED) return reject("WebSocket closed");
+
+    const timer = setTimeout(() => {
+      reject("WebSocket open timeout");
+    }, timeout);
+
+    wsInstance.addEventListener("open", () => {
+      clearTimeout(timer);
+      resolve();
+    }, { once: true });
+  });
+}
 
 // WebSocket verbinden
 function connectWebSocket() {
+  if (stopRequested) {
+    console.log("[STOP] connectWebSocket aborted");
+    return;
+  }
+
+  if (ws && ws.readyState <= 1) {
+    console.log("[DEBUG] WebSocket already open or connecting");
+    return;
+  }
+
+  console.log("[DEBUG] Creating new WebSocket");
+
   const wsProtocol = location.protocol === "https:" ? "wss" : "ws";
   ws = new WebSocket(`${wsProtocol}://${location.host}/ws`);
-
+  
   ws.onopen = () => {
-    setInfoMsg("[DEBUG] WebSocket connected");
-    if (myRole)
+    console.log("[DEBUG] WebSocket opened");
+    if (myRole && !stopRequested) {
       ws.send(JSON.stringify({ type: "register", role: myRole, roomId: ROOM_ID }));
-    setAppState(ConnectionState.WAITING);
+    }
   };
 
-  ws.onmessage = handleMessage;
-
-  ws.onerror = e => console.error("[DEBUG] WebSocket Error:", e);
+  ws.onmessage = async (event) => {
+    if (stopRequested) return;
+    handleMessage(event);
+  };
 
   ws.onclose = () => {
-    console.warn("[DEBUG] WebSocket closed – try reconnect ...");
-	setInfoMsg("websocket try reconnect");
-    setAppState(ConnectionState.ERROR);
-    setTimeout(() => {
-      connectWebSocket();
-      if (myRole) {
-        ws.addEventListener("open", () => {
-          ws.send(JSON.stringify({ type: "register", role: myRole, roomId: ROOM_ID }));
-         }, { once: true });
-      }
-    }, reconnectInterval);
+    if (stopRequested) {
+      console.log("[STOP] WebSocket closed — no reconnect");
+      return;
+    }
+    console.log("[DEBUG] WebSocket closed — scheduling reconnect");
+    scheduleReconnect();
+  };
+
+  ws.onerror = (err) => {
+    console.warn("[ERROR] WebSocket error:", err);
+    if (!stopRequested) ws.close();
   };
 }
-connectWebSocket();
+
+// --- ADD scheduleReconnect() FUNCTION ---
+function scheduleReconnect() {
+  if (stopRequested || reconnectInProgress) {
+    console.log("[STOP] scheduleReconnect skipped");
+    return;
+  }
+  reconnectInProgress = true;
+  clearTimeout(reconnectTimer);
+
+  reconnectTimer = setTimeout(() => {
+    reconnectInProgress = false;
+    if (!stopRequested) {
+      console.log("[DEBUG] Reconnecting...");
+      connectWebSocket();
+    } else {
+      console.log("[STOP] Reconnect timer expired — stop requested");
+    }
+  }, reconnectInterval);
+}
+
 
 // --- ICE Server von Xirsys laden ---
 async function fetchIceServers() {
@@ -547,6 +603,16 @@ function safePlay(videoEl) {
 
 
 async function start(role) {
+  stopRequested = false;
+  reconnectInProgress = false;
+  clearTimeout(reconnectTimer);
+
+  // Ensure WebSocket is valid before checking its state
+  if (!ws || ws.readyState > 1) {
+    console.log("[DEBUG] No active WebSocket, connecting...");
+    connectWebSocket();
+  }  
+  
   document.getElementById("loginForm").style.display = "none";
   document.getElementById("changeForm").style.display = "none";
 
@@ -574,15 +640,17 @@ async function start(role) {
   
 async function startSender() {
 
-    setInfoMsg("start sender");
-	ws.send(JSON.stringify({ type: "senderStatus", active: true, roomId: ROOM_ID }));
-    ws.send(JSON.stringify({ type: "register", role: "sender", roomId: ROOM_ID }));
-    senderBtn.classList.add('active');
-    document.getElementById("localVideo").style.display = "block"; 
-    document.getElementById("remoteVideo").style.display = "none";
-    document.getElementById("remoteStatus").style.display = "none";
-    document.getElementById("localStatus").style.display = "block";
-
+  setInfoMsg("start sender");
+  
+  await waitForWebSocketOpen(ws); // ? Wait until it's open
+  
+  ws.send(JSON.stringify({ type: "senderStatus", active: true, roomId: ROOM_ID }));
+  ws.send(JSON.stringify({ type: "register", role: "sender", roomId: ROOM_ID }));
+  senderBtn.classList.add('active');
+  document.getElementById("localVideo").style.display = "block"; 
+  document.getElementById("remoteVideo").style.display = "none";
+  document.getElementById("remoteStatus").style.display = "none";
+  document.getElementById("localStatus").style.display = "block";
 
   stopBtn.style.display = 'block';
   setAppState(ConnectionState.WAITING);
@@ -641,7 +709,7 @@ async function startSender() {
   pc.oniceconnectionstatechange = () => {
     setInfoMsg("[DEBUG] ICE state:", pc.iceConnectionState);
     if (['disconnected','failed'].includes(pc.iceConnectionState)) {
-      setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(5);
+      setAppState(ConnectionState.RECONNECTING); attemptReconnectWithDelay(5);
     }
     if (['connected'].includes(pc.iceConnectionState)) {
       setAppState(ConnectionState.CONNECTED);
@@ -654,7 +722,7 @@ async function startSender() {
     await fillCameraSelect();
 	await startLocalStream();
     setInfoMsg("sending");
-	select.onchange = () => setAppState(ConnectionState.IDLE);
+	// select.onchange = () => setAppState(ConnectionState.IDLE);
     // Audio-Button automatisch klicken, wenn Sender startet
     //document.getElementById("audioBtn").click();
 
@@ -662,19 +730,22 @@ async function startSender() {
 
  async function startReceiver() {
 
-    setInfoMsg("start receiver");
-    receiverBtn.classList.add('active'); // optional
-    const led = receiverBtn.querySelector('.led');
-    if (led) led.classList.add('on');  // LED rot einschalten    document.getElementById("remoteVideo").style.display = "block";
-    document.getElementById("localVideo").style.display = "none";
-    document.getElementById("remoteVideo").style.display = "block";
-    document.getElementById("blackoutArea").style.display = "none";
-    document.getElementById("localStatus").style.display = "none";
-    document.getElementById("remoteStatus").style.display = "block";
+  setInfoMsg("start receiver");
+  receiverBtn.classList.add('active'); // optional
+  const led = receiverBtn.querySelector('.led');
+  if (led) led.classList.add('on');  // LED rot einschalten    document.getElementById("remoteVideo").style.display = "block";
+  document.getElementById("localVideo").style.display = "none";
+  document.getElementById("remoteVideo").style.display = "block";
+  document.getElementById("blackoutArea").style.display = "none";
+  document.getElementById("localStatus").style.display = "none";
+  document.getElementById("remoteStatus").style.display = "block";
  
   stopBtn.style.display = 'block';
   setAppState(ConnectionState.WAITING);
+  
+  await waitForWebSocketOpen(ws); // ? Wait until it's open
 
+  
   // --- ICE Server laden ---
   let iceServers = [];
   try {
@@ -720,7 +791,7 @@ async function startSender() {
   pc.oniceconnectionstatechange = () => {
     setInfoMsg("[DEBUG] ICE state:", pc.iceConnectionState);
     if (['disconnected','failed'].includes(pc.iceConnectionState)) {
-      setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(5);
+      setAppState(ConnectionState.RECONNECTING); attemptReconnectWithDelay(5);
     }
     if (['connected'].includes(pc.iceConnectionState)) {
       setAppState(ConnectionState.CONNECTED);
@@ -876,31 +947,48 @@ function disableAudio() {
 }
 
 
-function stopAll() {
-  setInfoMsg("stopAll");
-  setAppState(ConnectionState.IDLE);
-  localOfferSent = false;
-  
-  if (myRole === "sender") {
-    ws.send(JSON.stringify({ type: "senderStatus", active: false, roomId: ROOM_ID }));
-  }
+function stopAll(showLog = true) {
+  if (showLog) setInfoMsg("stopAll - full stop");
+  stopRequested = true;
+  reconnectInProgress = false;
 
-  if (pc) { pc.close(); pc = null; }
-  if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+  clearTimeout(reconnectTimer);
+  clearTimeout(idleRestartTimer);
+
+  try {
+    if (ws) {
+      ws.onclose = null;
+      ws.onerror = null;
+      ws.onmessage = null;
+      ws.close();
+    }
+  } catch (e) {}
+  ws = null;
+
+  try {
+    if (pc) pc.close();
+  } catch (e) {}
+  pc = null;
+
+  try {
+    if (localStream) localStream.getTracks().forEach(t => t.stop());
+  } catch (e) {}
+  localStream = null;
+
+  setAppState(ConnectionState.IDLE);
+  setInfoMsg("All connections stopped");
 
   const senderBtn = document.getElementById('senderBtn');
   const receiverBtn = document.getElementById('receiverBtn');
-
   senderBtn.disabled = false;
   receiverBtn.disabled = false;
   senderBtn.classList.remove('active');
-const led = receiverBtn.querySelector('.led');
-if (led) led.classList.remove('on'); // LED ausschalten
+  const led = receiverBtn.querySelector('.led');
+  if (led) led.classList.remove('on');
   document.getElementById('stopBtn').style.display = 'none';
   document.getElementById('cameraSelect').style.display = 'none';
   document.getElementById('blackoutArea').style.display = 'none';
 
-  // hier prüfen ob Sender aktiv ist
   if (window.senderActive) {
     senderBtn.disabled = true;
     senderBtn.textContent = "sender (locked)";
@@ -909,14 +997,25 @@ if (led) led.classList.remove('on'); // LED ausschalten
 
 
 function attemptReconnectWithDelay(seconds) {
-  setInfoMsg("try reconnect");
-  setTimeout(() => {
-    if (!pc || pc.iceConnectionState === 'disconnected') {
-      setInfoMsg("[DEBUG] try to reconnect");
-      stopAll(); if (myRole) start(myRole);
+  if (stopRequested) {
+    setInfoMsg("[DEBUG] attemptReconnectWithDelay skipped (stop requested)");
+    return;
+  }
+
+  clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(() => {
+    if (stopRequested) {
+      setInfoMsg("[DEBUG] reconnect timer cancelled");
+      return;
+    }
+    if (!pc || pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+      setInfoMsg("[DEBUG] try to reconnect after delay");
+      stopAll(false); // silent stop
+      if (!stopRequested && myRole) start(myRole);
     }
   }, seconds * 1000);
 }
+
 
 // Passwort anzeigen, wenn auf das App-Icon geklickt wird
 //document.addEventListener("DOMContentLoaded", () => {

@@ -171,7 +171,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v75
+   <span>robocam</span>v76
    <input type="text" id="infoMsg" style="margin-left: 10px;">
   </div>
   <br>
@@ -555,18 +555,36 @@ if (data.sdp) {
       return;
     }
 
-    // Für eingehende Offer (nach evtl. Rollback)
-    if (description.type === "offer") {
-      await pc.setRemoteDescription(description);
-      setInfoMsg("creating answer");
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      ws.send(JSON.stringify({ sdp: pc.localDescription }));
-      return;
-    }
+if (description.type === "offer") {
+  // Guard against invalid signaling state
+  if (pc.signalingState !== "stable" && pc.signalingState !== "have-remote-offer") {
+    console.warn("[DEBUG] Ignoring offer in state:", pc.signalingState);
+    return;
+  }
+
+  await pc.setRemoteDescription(description);
+
+  if (pc.signalingState !== "have-remote-offer") {
+    console.warn("[DEBUG] Skipping answer creation: state changed to", pc.signalingState);
+    return;
+  }
+
+  setInfoMsg("creating answer");
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ sdp: pc.localDescription }));
+  }
+  return;
+}
+
+
 
   } catch (err) {
-    console.error("setRemoteDescription error:", err);
+    console.warning("setRemoteDescription error:", err);
+//	stopAll(false);
+    if (myRole) start(myRole);
   }
   return;
 }

@@ -577,7 +577,7 @@ async function start(role) {
                     else { startReceiver(); }
   }
   
-function determineConnectioType() {
+function determineConnectionType() {
   // === Verbindungstyp (STUN / TURN / Direkt) erkennen ===
     pc.addEventListener("iceconnectionstatechange", async () => {
     if (pc.iceConnectionState === "connected") {
@@ -633,6 +633,7 @@ async function startSender() {
   let iceServers = [];
   try {
     iceServers = await fetchIceServers();
+	console.log("Using ICE servers:", iceServers);
   } catch (e) {
     console.error("ICE Server fetch failed:", e);
   }
@@ -640,7 +641,7 @@ async function startSender() {
   pc = new RTCPeerConnection({ iceServers: iceServers.length ? iceServers : [{ urls: "stun:stun.l.google.com:19302" }] });
 
   // === Verbindungstyp (STUN / TURN / Direkt) erkennen ===
-  determineConnectioType();
+  determineConnectionType();
 
   
   // --- onnegotiationneeded: create explicit offer ---
@@ -730,7 +731,7 @@ async function startSender() {
   pc = new RTCPeerConnection({ iceServers: iceServers.length ? iceServers : [{ urls: "stun:stun.l.google.com:19302" }] });
 
   // === Verbindungstyp (STUN / TURN / Direkt) erkennen ===
-  determineConnectioType();
+  determineConnectionType();
 
   // --- Transceiver nur für Receiver ---
     setInfoMsg("[DEBUG] Receiver: adding recvonly transceivers");

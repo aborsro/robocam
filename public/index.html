@@ -171,7 +171,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v76
+   <span>robocam</span>v77
    <input type="text" id="infoMsg" style="margin-left: 10px;">
    <input type="text" id="infoMode" style="margin-left: 10px;">
   </div>
@@ -668,6 +668,7 @@ async function startSender() {
 
 
   pc.onconnectionstatechange = () => {
+    if (!pc) return;
     if (pc.connectionState === "connected") {
       const receivers = pc.getReceivers();
       receivers.forEach(r => {
@@ -684,6 +685,7 @@ async function startSender() {
  
   pc.onicecandidate = e => { if (e.candidate) ws.send(JSON.stringify({ candidate: e.candidate })); };
   pc.oniceconnectionstatechange = () => {
+    if (!pc) return;
     setInfoMsg("[DEBUG] ICE state:", pc.iceConnectionState);
     if (['disconnected','failed'].includes(pc.iceConnectionState)) {
       setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(5);
@@ -750,6 +752,7 @@ async function startSender() {
   };
   
   pc.onconnectionstatechange = () => {
+    if (!pc) return;
     if (pc.connectionState === "connected") {
       const receivers = pc.getReceivers();
       receivers.forEach(r => {
@@ -932,7 +935,12 @@ function stopAll() {
     ws.send(JSON.stringify({ type: "senderStatus", active: false, roomId: ROOM_ID }));
   }
 
-  if (pc) { pc.close(); pc = null; }
+  if (pc) {
+     pc.oniceconnectionstatechange = null;
+     pc.onconnectionstatechange = null;
+     pc.close();
+	 pc = null;
+  }
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
 
   const senderBtn = document.getElementById('senderBtn');

@@ -342,6 +342,65 @@ document.getElementById('localVideo').style.display = 'none';
 document.getElementById("localStatus").style.display = "none";
 document.getElementById("remoteStatus").style.display = "none";
 
+// --- Feste ICE-Server-Konfiguration (Xirsys) ---
+const iceServers = [
+  {
+    urls: [
+      "stun:fr-turn3.xirsys.com",
+      "turn:fr-turn3.xirsys.com:80?transport=udp",
+      "turn:fr-turn3.xirsys.com:3478?transport=udp",
+      "turn:fr-turn3.xirsys.com:80?transport=tcp",
+      "turn:fr-turn3.xirsys.com:3478?transport=tcp",
+      "turns:fr-turn3.xirsys.com:443?transport=tcp",
+      "turns:fr-turn3.xirsys.com:5349?transport=tcp"
+    ],
+    username: "h2x8QP2MzZzIqqJdIkTjOPwg2CP9JuX-3ohJnNzzkilRsL5uWXi1bZl56AeLhlfhAAAAAGkPAc1hYm9yc3Jv",
+    credential: "77c9ae1a-bc7e-11f0-8996-4a5c3d748004"
+  }
+];
+
+
+// --- PeerConnection erstellen ---
+function createPeerConnection() {
+  pc = new RTCPeerConnection({ iceServers });
+
+  // --- ICE / Connection Event-Handler ---
+  pc.oniceconnectionstatechange = () => {
+    if (!pc) return;
+    setInfoMsg("[DEBUG] ICE state: " + pc.iceConnectionState);
+    if (['disconnected','failed'].includes(pc.iceConnectionState)) {
+      setAppState(ConnectionState.ERROR);
+      attemptReconnectWithDelay(5);
+    }
+    if (pc.iceConnectionState === 'connected') {
+      setAppState(ConnectionState.CONNECTED);
+    }
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (!pc) return;
+    setInfoMsg("[DEBUG] Connection state: " + pc.connectionState);
+  };
+
+  pc.onicecandidate = e => {
+    if (e.candidate && ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ candidate: e.candidate }));
+    }
+  };
+
+  pc.ontrack = e => {
+    if (e.streams && e.streams[0]) {
+      if (myRole === 'receiver') {
+        remoteVideo.srcObject = e.streams[0];
+        safePlay(remoteVideo);
+        setInfoMsg("Receiving video/audio");
+      }
+    }
+  };
+
+  return pc;
+}
+
 
 // WebSocket verbinden
 function connectWebSocket() {
@@ -638,12 +697,11 @@ async function startSender() {
     console.error("ICE Server fetch failed:", e);
   }
   
-  pc = new RTCPeerConnection({ iceServers: iceServers.length ? iceServers : [{ urls: "stun:stun.l.google.com:19302" }] });
+  pc = createPeerConnection();
 
   // === Verbindungstyp (STUN / TURN / Direkt) erkennen ===
   determineConnectionType();
 
-  
   // --- onnegotiationneeded: create explicit offer ---
   pc.onnegotiationneeded = async () => {
     try {
@@ -722,15 +780,7 @@ async function startSender() {
   stopBtn.style.display = 'block';
   setAppState(ConnectionState.WAITING);
 
-  // --- ICE Server laden ---
-  let iceServers = [];
-  try {
-    iceServers = await fetchIceServers();
-  } catch (e) {
-    console.error("ICE Server fetch failed:", e);
-  }
-  
-  pc = new RTCPeerConnection({ iceServers: iceServers.length ? iceServers : [{ urls: "stun:stun.l.google.com:19302" }] });
+  pc = createPeerConnection();
 
   // === Verbindungstyp (STUN / TURN / Direkt) erkennen ===
   determineConnectionType();
@@ -935,14 +985,20 @@ function stopAll() {
     ws.send(JSON.stringify({ type: "senderStatus", active: false, roomId: ROOM_ID }));
   }
 
+  // --- PeerConnection sauber schließen ---
   if (pc) {
-     pc.oniceconnectionstatechange = null;
-     pc.onconnectionstatechange = null;
-     pc.close();
-	 pc = null;
+    pc.oniceconnectionstatechange = null;
+    pc.onconnectionstatechange = null;
+    pc.onicecandidate = null;
+    pc.ontrack = null;
+    pc.close();
+    pc = null;
   }
-  if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
-
+  
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+  }
   const senderBtn = document.getElementById('senderBtn');
   const receiverBtn = document.getElementById('receiverBtn');
 

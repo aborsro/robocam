@@ -136,7 +136,7 @@ video {
 .fullwidth {
   max-width: 100% !important;
   width: 100% !important;
-  height: 80vh !important;   /* 80% der Fensterhöhe */
+  height: 100% !important;   /* 80% der Fensterhöhe */
   object-fit: contain;       /* Bild komplett anzeigen ohne Verzerrung */
 }
 
@@ -171,8 +171,9 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v74
+   <span>robocam</span>v75
    <input type="text" id="infoMsg" style="margin-left: 10px;">
+   <input type="text" id="infoMode" style="margin-left: 10px;">
   </div>
   <br>
   <div class="top-bar">
@@ -372,7 +373,11 @@ function connectWebSocket() {
     }, reconnectInterval);
   };
 }
+
 connectWebSocket();
+audioSetting = false;
+setAudioTracks(false);
+audioBtn.textContent = "audio off";
 
 // --- ICE Server von Xirsys laden ---
 async function fetchIceServers() {
@@ -409,8 +414,9 @@ function blackoutScreen() {
 audioBtn.addEventListener("click", () => {
   audioSetting = !audioSetting;
   setAudioTracks(audioSetting);
-  audioBtn.textContent = audioSetting ? "audio off" : "audio on";
+  audioBtn.textContent = audioSetting ? "audio on" : "audio off";
 });
+
 
 
 function setAudioTracks(enable) {
@@ -571,7 +577,43 @@ async function start(role) {
                     else { startReceiver(); }
   }
   
+function determineConnectioType() {
+  // === Verbindungstyp (STUN / TURN / Direkt) erkennen ===
+    pc.addEventListener("iceconnectionstatechange", async () => {
+    if (pc.iceConnectionState === "connected") {
+      try {
+        const stats = await pc.getStats();
+        stats.forEach(report => {
+          if (report.type === "candidate-pair" && report.state === "succeeded") {
+            const local = stats.get(report.localCandidateId);
+            const remote = stats.get(report.remoteCandidateId);
   
+            if (local && remote) {
+              let connectionType = "Unknown connection";
+  
+              if (local.candidateType === "relay" || remote.candidateType === "relay") {
+                connectionType = "TURN connection active";
+                console.log("?? TURN server in use (relay)");
+              } else if (local.candidateType === "srflx" || remote.candidateType === "srflx") {
+                connectionType = "STUN connection active";
+                console.log("?? STUN server in use (srflx)");
+              } else if (local.candidateType === "host" || remote.candidateType === "host") {
+                connectionType = "Direct P2P connection";
+                console.log("?? Direct peer-to-peer (host)");
+              }
+  
+              const infoField = document.getElementById("infoMode");
+              if (infoField) infoField.value = connectionType;
+            }
+          }
+        });
+      } catch (err) {
+        console.error("Error checking ICE candidates:", err);
+      }
+    }
+  });
+}
+ 
 async function startSender() {
 
     setInfoMsg("start sender");
@@ -597,6 +639,8 @@ async function startSender() {
   
   pc = new RTCPeerConnection({ iceServers: iceServers.length ? iceServers : [{ urls: "stun:stun.l.google.com:19302" }] });
 
+  // === Verbindungstyp (STUN / TURN / Direkt) erkennen ===
+  determineConnectioType();
 
   
   // --- onnegotiationneeded: create explicit offer ---
@@ -651,8 +695,8 @@ async function startSender() {
 
     const select = document.getElementById('cameraSelect');
     select.style.display = 'block';
-    await fillCameraSelect();
 	await startLocalStream();
+    await fillCameraSelect();
     setInfoMsg("sending");
 	select.onchange = () => setAppState(ConnectionState.IDLE);
     // Audio-Button automatisch klicken, wenn Sender startet
@@ -684,6 +728,9 @@ async function startSender() {
   }
   
   pc = new RTCPeerConnection({ iceServers: iceServers.length ? iceServers : [{ urls: "stun:stun.l.google.com:19302" }] });
+
+  // === Verbindungstyp (STUN / TURN / Direkt) erkennen ===
+  determineConnectioType();
 
   // --- Transceiver nur für Receiver ---
     setInfoMsg("[DEBUG] Receiver: adding recvonly transceivers");
@@ -745,7 +792,6 @@ async function getLocalStreamOnce() {
 // --- fill camera selector, no camera open here ---
 async function fillCameraSelect() {
   try {
-    if (!getUserMediaDone) return;
     if (fillCameraSelectDone) return;
     setInfoMsg("fillCameraSelect");
 
@@ -894,6 +940,7 @@ function stopAll() {
   senderBtn.disabled = false;
   receiverBtn.disabled = false;
   senderBtn.classList.remove('active');
+  receiverBtn.classList.remove('active');
 const led = receiverBtn.querySelector('.led');
 if (led) led.classList.remove('on'); // LED ausschalten
   document.getElementById('stopBtn').style.display = 'none';

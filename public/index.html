@@ -43,7 +43,7 @@
   transition: background-color 0.3s, transform 0.1s;
 
 /* LED-Kreis innerhalb des Buttons */
-button.led {
+  span.led {
   display: inline-block;
   width: 10px;
   height: 10px;
@@ -56,7 +56,7 @@ button.led {
 }
 
 /* LED an, rot */
-button.led.on {
+span.led.on {
   background-color: red;
   box-shadow: 0 0 5px red;
 }
@@ -147,7 +147,6 @@ video {
 </head>
 <body>
 
-<!-- Login Form -->
 <div id="loginForm">
   <h2>Login for ROBOCAM</h2>
   <div class="form-row">
@@ -157,7 +156,6 @@ video {
   <p id="loginMsg"></p>
 </div>
 
-<!-- Change Password Form -->
 <div id="changeForm" style="display:none;">
   <h3>Change password (master only)</h3>
   <div class="form-row">
@@ -167,11 +165,10 @@ video {
   <p id="changeMsg"></p>
 </div>
 
-<!-- robocam App -->
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v77
+   <span>robocam</span>v80
    <input type="text" id="infoMsg" style="margin-left: 10px;">
    <input type="text" id="infoMode" style="margin-left: 10px;">
   </div>
@@ -215,7 +212,7 @@ let full = false;
 let idleRestartTimer = null;
 let isNegotiating = false;
 let makingOffer = false;
-let polite = true; // nur einer der Peers sollte "polite" sein
+let polite = false; // wird in start(role) zugewiesen (receiver ist polite)
 
 
 // Button-Handler für volle Breite
@@ -360,9 +357,9 @@ const iceServers = [
 ];
 
 
-// --- PeerConnection erstellen ---
-function createPeerConnection() {
-  pc = new RTCPeerConnection({ iceServers });
+// --- PeerConnection erstellen (NEU: Akzeptiert Server-Liste) ---
+function createPeerConnection(servers) {
+  pc = new RTCPeerConnection({ iceServers: servers }); // *** HIER GEÄNDERT ***
 
   // --- ICE / Connection Event-Handler ---
   pc.oniceconnectionstatechange = () => {
@@ -617,6 +614,8 @@ async function start(role) {
 
   setInfoMsg(`[DEBUG] Starte als ${role}`);
   myRole = role;
+  polite = (role === 'receiver'); // *** NEU: Explizite Zuweisung der Polite-Rolle ***
+  
   if (ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'register', role: myRole, roomId: ROOM_ID }));
   }
@@ -672,7 +671,10 @@ function determineConnectionType() {
     }
   });
 }
- 
+
+
+// Hier beginnt die startSender-Funktion, ersetzen Sie sie vollständig.
+
 async function startSender() {
 
     setInfoMsg("start sender");
@@ -688,16 +690,8 @@ async function startSender() {
   stopBtn.style.display = 'block';
   setAppState(ConnectionState.WAITING);
 
-  // --- ICE Server laden ---
-  let iceServers = [];
-  try {
-    iceServers = await fetchIceServers();
-	console.log("Using ICE servers:", iceServers);
-  } catch (e) {
-    console.error("ICE Server fetch failed:", e);
-  }
-  
-  pc = createPeerConnection();
+  // --- Verwenden Sie direkt die statischen ICE Server (fetchIceServers entfernt) ---
+  pc = createPeerConnection(iceServers); 
 
   // === Verbindungstyp (STUN / TURN / Direkt) erkennen ===
   determineConnectionType();
@@ -765,6 +759,8 @@ async function startSender() {
 
 }
 
+// Hier beginnt die startReceiver-Funktion, ersetzen Sie sie vollständig.
+
  async function startReceiver() {
 
     setInfoMsg("start receiver");
@@ -780,7 +776,8 @@ async function startSender() {
   stopBtn.style.display = 'block';
   setAppState(ConnectionState.WAITING);
 
-  pc = createPeerConnection();
+  // --- Verwenden Sie direkt die statischen ICE Server (fetchIceServers entfernt) ---
+  pc = createPeerConnection(iceServers); 
 
   // === Verbindungstyp (STUN / TURN / Direkt) erkennen ===
   determineConnectionType();

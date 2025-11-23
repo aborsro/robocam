@@ -10,14 +10,14 @@
   
   .form-row {
   display: flex;
-  align-items: center;  /* vertically center button with input */
-  gap: 15px;            /* increase spacing between input and button */
-  margin-bottom: 10px;  /* space below row */
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 10px;
 }
 
 .form-row input {
   padding: 6px 10px;
-  height: 33px;          /* match button height */
+  height: 33px;
   border-radius: 8px;
   border: 1px solid #ccc;
   font-size: 14px;
@@ -42,36 +42,30 @@
   cursor: pointer;
   transition: background-color 0.3s, transform 0.1s;
 
-/* LED-Kreis innerhalb des Buttons */
   span.led {
   display: inline-block;
   width: 10px;
   height: 10px;
   margin-right: 6px;
   border-radius: 50%;
-  background-color: grey; /* standard: aus */
+  background-color: grey;
   vertical-align: middle;
   box-shadow: 0 0 2px rgba(0,0,0,0.5);
   transition: background-color 0.2s, box-shadow 0.2s;
 }
 
-/* LED an, rot */
 span.led.on {
   background-color: red;
   box-shadow: 0 0 5px red;
 }
-
   
-  /* uniform size */
   height: 33px;
-  padding: 0 16px;          /* only horizontal padding */
+  padding: 0 16px;
   
-  /* center text vertically */
   display: flex;
   align-items: center;
   justify-content: center;
 }
-
 
   button:hover:enabled { background-color: #45a049; }
   button:disabled { cursor: not-allowed; opacity: 0.8; }
@@ -83,41 +77,39 @@ span.led.on {
   #blackoutBtn { background-color: grey; opacity: 1; z-index: 99999; }
   #audioBtn { background-color: grey; opacity: 1; z-index: 99998; }
   #blackoutArea { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: black; opacity: 1; z-index: 99998; }
-      #controls {
-      margin-bottom: 15px;
-    }
+  #controls { margin-bottom: 15px; }
 
-    #toggleSizeBtn {
-      padding: 10px 20px;
-      background: #0077cc;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 16px;
-    }
+  #toggleSizeBtn {
+    padding: 10px 20px;
+    background: #0077cc;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+  }
 
-    #toggleSizeBtn:hover {
-      background: #005fa3;
-    }
+  #toggleSizeBtn:hover {
+    background: #005fa3;
+  }
 
 .video-container {
   position: relative;
   width: 100%;
   max-width: 100%;
   margin: 10px 0;
-  display: inline-block; /* keeps video + overlay aligned */
+  display: inline-block;
 }
 
 video {
   display: block;
-  width: 100%;       /* fill width */
+  width: 100%;
   height: auto;
   background: black;
   border: 3px solid #ccc;
   border-radius: 8px;
-  position: relative;  /* important: create a new stacking context */
-  z-index: 1;          /* video stays below */
+  position: relative;
+  z-index: 1;
 }
 
 .status-overlay {
@@ -129,21 +121,20 @@ video {
   padding: 4px 8px;
   border-radius: 6px;
   font-size: 14px;
-  z-index: 2;           /* overlay on top of video */
-  pointer-events: none; /* clicks pass through */
+  z-index: 2;
+  pointer-events: none;
 }
 
 .fullwidth {
   max-width: 100% !important;
   width: 100% !important;
-  height: 100% !important;   /* 80% der Fensterhöhe */
-  object-fit: contain;       /* Bild komplett anzeigen ohne Verzerrung */
+  height: 100% !important;
+  object-fit: contain;
 }
 
   .inline-container img { vertical-align: middle; height: 40px; }
   .inline-container span { vertical-align: middle; margin-left: 10px; font-size: 30px; }
-
-  </style>
+</style>
 </head>
 <body>
 
@@ -168,7 +159,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v80
+   <span>robocam</span>v82
    <input type="text" id="infoMsg" style="margin-left: 10px;">
    <input type="text" id="infoMode" style="margin-left: 10px;">
   </div>
@@ -176,7 +167,7 @@ video {
   <div class="top-bar">
    <div class="buttons">
   	 	<div id="controls">
-       <button id="toggleSizeBtn">ðŸ“º wide</button>
+       <button id="toggleSizeBtn">?? wide</button>
     </div>
      <button id="senderBtn" onclick="start('sender')">send</button>
 <button id="receiverBtn" onclick="start('receiver')">
@@ -207,28 +198,27 @@ const remoteVideo = document.getElementById("remoteVideo");
 const toggleBtn = document.getElementById("toggleSizeBtn");
 let pc;
 let ws;
-let role; // "sender" oder "receiver"
+let role;
 let full = false;
 let idleRestartTimer = null;
 let isNegotiating = false;
 let makingOffer = false;
-let polite = false; // wird in start(role) zugewiesen (receiver ist polite)
+let polite = false;
+let iceCandidateQueue = []; // ? NEU: Queue für frühe ICE candidates
 
-
-// Button-Handler für volle Breite
 toggleBtn.onclick = () => {
   full = !full;
   if (full) {
     localVideo.classList.add("fullwidth");
     remoteVideo.classList.add("fullwidth");
-    toggleBtn.textContent = "ðŸ”™ normal";
+    toggleBtn.textContent = "?? normal";
   } else {
     localVideo.classList.remove("fullwidth");
     remoteVideo.classList.remove("fullwidth");
-    toggleBtn.textContent = "ðŸ“º wide";
+    toggleBtn.textContent = "?? wide";
   }
 };
-	
+
 // --- Login / Passwort-Logik ---
 async function login() {
   try {
@@ -275,7 +265,7 @@ async function changePassword() {
     document.getElementById('password').value = "";
   } catch (err) {
     console.error("Passwort-Änderung Fehler:", err);
-    document.getElementById("changeMsg").innerText = "Serverfehler!" + password;
+    document.getElementById("changeMsg").innerText = "Serverfehler!";
   }
 }
 
@@ -288,7 +278,6 @@ const ConnectionState = {
 };
 let appState = ConnectionState.IDLE;
 
-
 function setInfoMsg(msg) {
   console.log(msg);
   const infoMsg = document.getElementById('infoMsg');
@@ -299,20 +288,18 @@ function setAppState(state) {
   appState = state;
   setInfoMsg(`[STATE] ${state}`);
 
-  // Show status inside remote video overlay
   const remoteStatus = document.getElementById('remoteStatus');
   if (remoteStatus) remoteStatus.textContent = `Status: ${state}`;
 
-  // optional: also update local overlay if needed
   const localStatus = document.getElementById('localStatus');
   if (localStatus) localStatus.textContent = `Status: ${state}`; 
   
-  // --- Auto-restart logic for sender ---
-  if (myRole === "sender" && ( state === ConnectionState.IDLE || state === ConnectionState.WAITING)) {
+  // Auto-restart logic for sender
+  if (myRole === "sender" && (state === ConnectionState.IDLE || state === ConnectionState.WAITING)) {
     clearTimeout(idleRestartTimer);
     idleRestartTimer = setTimeout(() => {
       if ((appState === ConnectionState.IDLE)||(appState === ConnectionState.WAITING)) {
-        setInfoMsg("[DEBUG] Sender idle/waitung for 5s – restarting...");
+        setInfoMsg("[DEBUG] Sender idle/waiting for 5s – restarting...");
         start("sender");
       }
     }, 5000);
@@ -333,13 +320,11 @@ let fillCameraSelectDone = false;
 const reconnectInterval = 3000;
 const ROOM_ID = 'id1';
 
-// Videos aus, werden bei send/receive eingeschaltet
 document.getElementById('remoteVideo').style.display = 'none';
 document.getElementById('localVideo').style.display = 'none';
 document.getElementById("localStatus").style.display = "none";
 document.getElementById("remoteStatus").style.display = "none";
 
-// --- Feste ICE-Server-Konfiguration (Xirsys) ---
 const iceServers = [
   {
     urls: [
@@ -356,12 +341,25 @@ const iceServers = [
   }
 ];
 
+// ? OPTIMIERT: ICE-Kandidaten-Queue abarbeiten
+async function processIceCandidateQueue() {
+  if (!pc || !pc.remoteDescription) return;
+  
+  setInfoMsg(`[DEBUG] Processing ${iceCandidateQueue.length} queued ICE candidates`);
+  
+  while (iceCandidateQueue.length > 0) {
+    const candidate = iceCandidateQueue.shift();
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (err) {
+      console.error("Queued candidate error:", err);
+    }
+  }
+}
 
-// --- PeerConnection erstellen (NEU: Akzeptiert Server-Liste) ---
 function createPeerConnection(servers) {
-  pc = new RTCPeerConnection({ iceServers: servers }); // *** HIER GEÄNDERT ***
+  pc = new RTCPeerConnection({ iceServers: servers });
 
-  // --- ICE / Connection Event-Handler ---
   pc.oniceconnectionstatechange = () => {
     if (!pc) return;
     setInfoMsg("[DEBUG] ICE state: " + pc.iceConnectionState);
@@ -398,8 +396,6 @@ function createPeerConnection(servers) {
   return pc;
 }
 
-
-// WebSocket verbinden
 function connectWebSocket() {
   const wsProtocol = location.protocol === "https:" ? "wss" : "ws";
   ws = new WebSocket(`${wsProtocol}://${location.host}/ws`);
@@ -412,7 +408,6 @@ function connectWebSocket() {
   };
 
   ws.onmessage = handleMessage;
-
   ws.onerror = e => console.error("[DEBUG] WebSocket Error:", e);
 
   ws.onclose = () => {
@@ -435,45 +430,17 @@ audioSetting = false;
 setAudioTracks(false);
 audioBtn.textContent = "audio off";
 
-// --- ICE Server von Xirsys laden ---
-async function fetchIceServers() {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.onreadystatechange = () => {
-      if (xhr.readyState === 4) {
-        if (xhr.status === 200) {
-          try {
-            const res = JSON.parse(xhr.responseText);
-            setInfoMsg("Xirsys ICE Servers:", res.v.iceServers);
-            resolve(res.v.iceServers);
-          } catch (err) { reject(err); }
-        } else {
-          reject(new Error("Xirsys API Error " + xhr.status));
-        }
-      }
-    };
-    xhr.open("PUT", "https://global.xirsys.net/_turn/robocam", true);
-    xhr.setRequestHeader("Authorization", "Basic " + btoa("aborsro:e2d37f0c-800f-11f0-98d4-0242ac150002"));
-    xhr.setRequestHeader("Content-Type", "application/json");
-    xhr.send(JSON.stringify({ format: "urls" }));
-  });
-}
-
-
 function blackoutScreen() {
   blackOut = !blackOut;
   document.getElementById('blackoutArea').style.display = blackOut ? 'block' : 'none';
   document.getElementById('blackoutBtn').textContent = blackOut ? 'display' : 'blackout';
 }
 
-// --- Buttons ---
 audioBtn.addEventListener("click", () => {
   audioSetting = !audioSetting;
   setAudioTracks(audioSetting);
   audioBtn.textContent = audioSetting ? "audio on" : "audio off";
 });
-
-
 
 function setAudioTracks(enable) {
   if (localStream) {
@@ -483,11 +450,9 @@ function setAudioTracks(enable) {
   }
 }
 
-  
-// --- Nachrichten vom Server verarbeiten ---
+// ? VERBESSERT: Robustere Message-Behandlung mit ICE-Queue
 async function handleMessage(msg) {
   try {
-    // --- Blob oder String in Text umwandeln ---
     let text;
     if (msg.data instanceof Blob) {
       text = await msg.data.text();
@@ -495,7 +460,6 @@ async function handleMessage(msg) {
       text = msg.data;
     }
 
-    // --- JSON parsen ---
     let data;
     try {
       data = JSON.parse(text);
@@ -510,10 +474,9 @@ async function handleMessage(msg) {
 	  return;
     }
 	
-    // --- Statusmeldungen vom Server ---
     if (data.type === "senderStatus") {
       const senderBtn = document.getElementById("senderBtn");
-      window.senderActive = data.active;  // ?? global merken
+      window.senderActive = data.active;
     
       if (data.active) {
         senderBtn.disabled = true;
@@ -525,61 +488,71 @@ async function handleMessage(msg) {
       return;
     }
 
-
-    // --- WebRTC Signalisierung ---
-if (data.sdp) {
-  if (!pc) return;
-  try {
-    const description = new RTCSessionDescription(data.sdp);
-    const isOffer = description.type === "offer";
-    // Offer-Collision erkennen: remote offer + wir machen gerade ein offer ODER signalingState != stable
-    const offerCollision = isOffer && (makingOffer || pc.signalingState !== "stable");
-
-    if (offerCollision) {
-      if (!polite) {
-        // Wenn impolite: ignorieren wir das hereinkommende offer
-        setInfoMsg("[DEBUG] Offer collision - ignoring (impolite)");
-        return;
-      }
-      // Wenn polite: rollback des lokalen offers bevor wir remote setzen
-      setInfoMsg("[DEBUG] Offer collision - polite peer: rollback local offer");
+    // ? OPTIMIERT: SDP-Handling mit verbesserter Offer-Collision
+    if (data.sdp) {
+      if (!pc) return;
       try {
-        await pc.setLocalDescription({ type: "rollback" });
-      } catch (rbErr) {
-        console.warn("Rollback failed (might be ok):", rbErr);
-      }
-    }
+        const description = new RTCSessionDescription(data.sdp);
+        const isOffer = description.type === "offer";
+        const offerCollision = isOffer && (makingOffer || pc.signalingState !== "stable");
 
-    // Wenn es eine Antwort ist: vergewissere dich, dass wir ein local offer hatten
-    if (description.type === "answer") {
-      if (pc.signalingState !== "have-local-offer") {
-        console.warn("Answer ignored – wrong signaling state:", pc.signalingState);
-        return;
+        if (offerCollision) {
+          if (!polite) {
+            setInfoMsg("[DEBUG] Offer collision - ignoring (impolite)");
+            return;
+          }
+          setInfoMsg("[DEBUG] Offer collision - polite peer: rollback local offer");
+          try {
+            await pc.setLocalDescription({ type: "rollback" });
+            makingOffer = false; // ? NEU: Flag zurücksetzen
+          } catch (rbErr) {
+            console.warn("Rollback failed (might be ok):", rbErr);
+          }
+        }
+
+        if (description.type === "answer") {
+          if (pc.signalingState !== "have-local-offer") {
+            console.warn("Answer ignored – wrong signaling state:", pc.signalingState);
+            return;
+          }
+          await pc.setRemoteDescription(description);
+          setInfoMsg("received answer");
+          
+          // ? NEU: Queue nach Answer abarbeiten
+          await processIceCandidateQueue();
+          return;
+        }
+
+        if (description.type === "offer") {
+          await pc.setRemoteDescription(description);
+          
+          // ? NEU: Queue abarbeiten bevor Answer erstellt wird
+          await processIceCandidateQueue();
+          
+          setInfoMsg("creating answer");
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          ws.send(JSON.stringify({ sdp: pc.localDescription }));
+          return;
+        }
+
+      } catch (err) {
+        console.error("setRemoteDescription error:", err);
       }
-      await pc.setRemoteDescription(description);
-      setInfoMsg("received answer");
       return;
     }
 
-    // Für eingehende Offer (nach evtl. Rollback)
-    if (description.type === "offer") {
-      await pc.setRemoteDescription(description);
-      setInfoMsg("creating answer");
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      ws.send(JSON.stringify({ sdp: pc.localDescription }));
-      return;
-    }
-
-  } catch (err) {
-    console.error("setRemoteDescription error:", err);
-  }
-  return;
-}
-
-
+    // ? OPTIMIERT: ICE-Kandidaten mit Queue-Logik
     if (data.candidate) {
       if (!pc) return;
+      
+      // Prüfen ob remoteDescription bereits gesetzt ist
+      if (!pc.remoteDescription || !pc.remoteDescription.type) {
+        setInfoMsg("[DEBUG] Queueing ICE candidate (no remote desc yet)");
+        iceCandidateQueue.push(data.candidate);
+        return;
+      }
+      
       try {
         await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
       } catch (err) {
@@ -597,7 +570,7 @@ let playPromise;
 
 function safePlay(videoEl) {
   if (playPromise) {
-    playPromise.catch(() => {}).finally(() => {}); // ignore previous play error
+    playPromise.catch(() => {}).finally(() => {});
   }
   playPromise = videoEl.play();
   playPromise.catch(err => {
@@ -607,21 +580,25 @@ function safePlay(videoEl) {
   });
 }
 
-
 async function start(role) {
   document.getElementById("loginForm").style.display = "none";
   document.getElementById("changeForm").style.display = "none";
 
   setInfoMsg(`[DEBUG] Starte als ${role}`);
   myRole = role;
-  polite = (role === 'receiver'); // *** NEU: Explizite Zuweisung der Polite-Rolle ***
+  polite = (role === 'receiver');
+  
+  // ? NEU: ICE-Queue zurücksetzen bei neuem Start
+  iceCandidateQueue = [];
   
   if (ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'register', role: myRole, roomId: ROOM_ID }));
   }
+  
   const senderBtn = document.getElementById('senderBtn');
   const receiverBtn = document.getElementById('receiverBtn');
   const stopBtn = document.getElementById('stopBtn');
+  
   document.getElementById('localVideo').srcObject = null;
   document.getElementById('remoteVideo').srcObject = null;
   senderBtn.disabled = true;
@@ -631,13 +608,12 @@ async function start(role) {
   senderBtn.textContent = "send";
   receiverBtn.textContent = "receive";
 
-  if (role === 'sender') { startSender();   }
-                    else { startReceiver(); }
-  }
+  if (role === 'sender') { startSender(); } 
+  else { startReceiver(); }
+}
   
 function determineConnectionType() {
-  // === Verbindungstyp (STUN / TURN / Direkt) erkennen ===
-    pc.addEventListener("iceconnectionstatechange", async () => {
+  pc.addEventListener("iceconnectionstatechange", async () => {
     if (pc.iceConnectionState === "connected") {
       try {
         const stats = await pc.getStats();
@@ -651,13 +627,13 @@ function determineConnectionType() {
   
               if (local.candidateType === "relay" || remote.candidateType === "relay") {
                 connectionType = "TURN connection active";
-                console.log("?? TURN server in use (relay)");
+                console.log("? TURN server in use (relay)");
               } else if (local.candidateType === "srflx" || remote.candidateType === "srflx") {
                 connectionType = "STUN connection active";
-                console.log("?? STUN server in use (srflx)");
+                console.log("? STUN server in use (srflx)");
               } else if (local.candidateType === "host" || remote.candidateType === "host") {
                 connectionType = "Direct P2P connection";
-                console.log("?? Direct peer-to-peer (host)");
+                console.log("? Direct peer-to-peer (host)");
               }
   
               const infoField = document.getElementById("infoMode");
@@ -672,31 +648,22 @@ function determineConnectionType() {
   });
 }
 
-
-// Hier beginnt die startSender-Funktion, ersetzen Sie sie vollständig.
-
 async function startSender() {
-
-    setInfoMsg("start sender");
-	ws.send(JSON.stringify({ type: "senderStatus", active: true, roomId: ROOM_ID }));
-    ws.send(JSON.stringify({ type: "register", role: "sender", roomId: ROOM_ID }));
-    senderBtn.classList.add('active');
-    document.getElementById("localVideo").style.display = "block"; 
-    document.getElementById("remoteVideo").style.display = "none";
-    document.getElementById("remoteStatus").style.display = "none";
-    document.getElementById("localStatus").style.display = "block";
-
+  setInfoMsg("start sender");
+  ws.send(JSON.stringify({ type: "senderStatus", active: true, roomId: ROOM_ID }));
+  ws.send(JSON.stringify({ type: "register", role: "sender", roomId: ROOM_ID }));
+  senderBtn.classList.add('active');
+  document.getElementById("localVideo").style.display = "block"; 
+  document.getElementById("remoteVideo").style.display = "none";
+  document.getElementById("remoteStatus").style.display = "none";
+  document.getElementById("localStatus").style.display = "block";
 
   stopBtn.style.display = 'block';
   setAppState(ConnectionState.WAITING);
 
-  // --- Verwenden Sie direkt die statischen ICE Server (fetchIceServers entfernt) ---
   pc = createPeerConnection(iceServers); 
-
-  // === Verbindungstyp (STUN / TURN / Direkt) erkennen ===
   determineConnectionType();
 
-  // --- onnegotiationneeded: create explicit offer ---
   pc.onnegotiationneeded = async () => {
     try {
       makingOffer = true;
@@ -711,13 +678,9 @@ async function startSender() {
     }
   };
 
-  
-  // --- Transceiver nur für Sender ---
-
-    setInfoMsg("[DEBUG] Sender: adding sendrecv transceivers");
-    pc.addTransceiver("video", { direction: "sendrecv" });
-    pc.addTransceiver("audio", { direction: "sendrecv" });
-
+  setInfoMsg("[DEBUG] Sender: adding sendrecv transceivers");
+  pc.addTransceiver("video", { direction: "sendrecv" });
+  pc.addTransceiver("audio", { direction: "sendrecv" });
 
   pc.onconnectionstatechange = () => {
     if (!pc) return;
@@ -740,55 +703,44 @@ async function startSender() {
     if (!pc) return;
     setInfoMsg("[DEBUG] ICE state:", pc.iceConnectionState);
     if (['disconnected','failed'].includes(pc.iceConnectionState)) {
-      setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(5);
+      setAppState(ConnectionState.ERROR); 
+      attemptReconnectWithDelay(5);
     }
     if (['connected'].includes(pc.iceConnectionState)) {
       setAppState(ConnectionState.CONNECTED);
     }
   };
 
-
-    const select = document.getElementById('cameraSelect');
-    select.style.display = 'block';
-	await startLocalStream();
-    await fillCameraSelect();
-    setInfoMsg("sending");
-	select.onchange = () => setAppState(ConnectionState.IDLE);
-    // Audio-Button automatisch klicken, wenn Sender startet
-    //document.getElementById("audioBtn").click();
-
+  const select = document.getElementById('cameraSelect');
+  select.style.display = 'block';
+  await startLocalStream();
+  await fillCameraSelect();
+  setInfoMsg("sending");
+  select.onchange = () => setAppState(ConnectionState.IDLE);
 }
 
-// Hier beginnt die startReceiver-Funktion, ersetzen Sie sie vollständig.
-
- async function startReceiver() {
-
-    setInfoMsg("start receiver");
-    receiverBtn.classList.add('active'); // optional
-    const led = receiverBtn.querySelector('.led');
-    if (led) led.classList.add('on');  // LED rot einschalten    document.getElementById("remoteVideo").style.display = "block";
-    document.getElementById("localVideo").style.display = "none";
-    document.getElementById("remoteVideo").style.display = "block";
-    document.getElementById("blackoutArea").style.display = "none";
-    document.getElementById("localStatus").style.display = "none";
-    document.getElementById("remoteStatus").style.display = "block";
+async function startReceiver() {
+  setInfoMsg("start receiver");
+  receiverBtn.classList.add('active');
+  const led = receiverBtn.querySelector('.led');
+  if (led) led.classList.add('on');
+  
+  document.getElementById("remoteVideo").style.display = "block";
+  document.getElementById("localVideo").style.display = "none";
+  document.getElementById("blackoutArea").style.display = "none";
+  document.getElementById("localStatus").style.display = "none";
+  document.getElementById("remoteStatus").style.display = "block";
  
   stopBtn.style.display = 'block';
   setAppState(ConnectionState.WAITING);
 
-  // --- Verwenden Sie direkt die statischen ICE Server (fetchIceServers entfernt) ---
   pc = createPeerConnection(iceServers); 
-
-  // === Verbindungstyp (STUN / TURN / Direkt) erkennen ===
   determineConnectionType();
 
-  // --- Transceiver nur für Receiver ---
-    setInfoMsg("[DEBUG] Receiver: adding recvonly transceivers");
-    pc.addTransceiver("video", { direction: "recvonly" });
-    pc.addTransceiver("audio", { direction: "recvonly" });
+  setInfoMsg("[DEBUG] Receiver: adding recvonly transceivers");
+  pc.addTransceiver("video", { direction: "recvonly" });
+  pc.addTransceiver("audio", { direction: "recvonly" });
 
- 
-  // --- Remote-Stream empfangen ---
   pc.ontrack = e => {
     setInfoMsg("[DEBUG] track received:", e.streams);
     if (remoteVideo.srcObject !== e.streams[0]) {
@@ -818,7 +770,8 @@ async function startSender() {
   pc.oniceconnectionstatechange = () => {
     setInfoMsg("[DEBUG] ICE state:", pc.iceConnectionState);
     if (['disconnected','failed'].includes(pc.iceConnectionState)) {
-      setAppState(ConnectionState.ERROR); attemptReconnectWithDelay(5);
+      setAppState(ConnectionState.ERROR); 
+      attemptReconnectWithDelay(5);
     }
     if (['connected'].includes(pc.iceConnectionState)) {
       setAppState(ConnectionState.CONNECTED);
@@ -828,9 +781,8 @@ async function startSender() {
 
 let getUserMediaDone = false;
 
-// --- unified helper ---
 async function getLocalStreamOnce() {
-  if (localStream) return localStream; // reuse existing
+  if (localStream) return localStream;
   setInfoMsg("getLocalStreamOnce: acquiring media...");
   localStream = await navigator.mediaDevices.getUserMedia({
     video: true,
@@ -840,13 +792,11 @@ async function getLocalStreamOnce() {
   return localStream;
 }
 
-// --- fill camera selector, no camera open here ---
 async function fillCameraSelect() {
   try {
     if (fillCameraSelectDone) return;
     setInfoMsg("fillCameraSelect");
 
-    // Use enumerateDevices() directly — no need to call getUserMedia here
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter(d => d.kind === "videoinput");
     const select = document.getElementById("cameraSelect");
@@ -866,7 +816,7 @@ async function fillCameraSelect() {
     };
 
     if (lastCameraId) select.value = lastCameraId;
-	fillCameraSelectDone = true;
+    fillCameraSelectDone = true;
   } catch (err) {
     console.error("fillCameraSelect error:", err);
     alert("Device in use");
@@ -875,12 +825,9 @@ async function fillCameraSelect() {
   }
 }
 
-// --- actual local stream start ---
 async function startLocalStream() {
   try {
     setInfoMsg("startLocalStream");
-
-    // one-time stream acquisition
     await getLocalStreamOnce();
 
     const devices = await navigator.mediaDevices.enumerateDevices();
@@ -898,9 +845,9 @@ async function startLocalStream() {
   }
 }
 
-
 let lastCameraId = null;
 
+// ? OPTIMIERT: Verbesserte Camera-Switching-Logik
 async function startLocalStreamAndOffer() {
   try {
     setInfoMsg("startLocalStreamAndOffer");
@@ -908,25 +855,30 @@ async function startLocalStreamAndOffer() {
     const select = document.getElementById('cameraSelect');
     const videoConstraints = select.value ? { deviceId: { exact: select.value } } : true;
 
-    // --- Neuen Stream holen ---
+    // ? NEU: Prüfen ob bereits die gleiche Kamera aktiv ist
+    if (localStream && localStream.active) {
+      const currentVideoTrack = localStream.getVideoTracks()[0];
+      if (currentVideoTrack && currentVideoTrack.getSettings().deviceId === select.value) {
+        setInfoMsg("Same camera already active");
+        return;
+      }
+    }
+
     const newStream = await navigator.mediaDevices.getUserMedia({
       video: videoConstraints,
       audio: audioSetting
     });
 
-    // --- VideoTrack ersetzen oder hinzufügen ---
     if (pc) {
       const videoSender = pc.getSenders().find(s => s.track && s.track.kind === "video");
       const newVideoTrack = newStream.getVideoTracks()[0];
 
-      if (videoSender) {
+      if (videoSender && newVideoTrack) {
         await videoSender.replaceTrack(newVideoTrack);
-      } else {
-        // Kein Sender vorhanden ? Track hinzufügen (löst onnegotiationneeded aus)
+      } else if (newVideoTrack) {
         pc.addTrack(newVideoTrack, newStream);
       }
 
-      // --- AudioTrack ersetzen oder hinzufügen ---
       const audioSender = pc.getSenders().find(s => s.track && s.track.kind === "audio");
       const newAudioTrack = newStream.getAudioTracks()[0];
       if (audioSender && newAudioTrack) {
@@ -936,27 +888,26 @@ async function startLocalStreamAndOffer() {
       }
     }
 
-    // --- Lokales Video setzen ---
     localVideo.srcObject = newStream;
     try { await localVideo.play(); } catch (err) { console.warn("localVideo play error:", err); }
 
-    // --- Alten Stream stoppen ---
-    if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
+    // ? NEU: Alten Stream ordentlich stoppen
+    if (localStream && localStream !== newStream) {
+      localStream.getTracks().forEach(track => {
+        track.stop();
+      });
     }
+    
     localStream = newStream;
+    lastCameraId = select.value;
 
     setInfoMsg("Camera/Audio updated successfully");
-	
-// --- nach Kamerawechsel nur Track ersetzen ---
-setInfoMsg("Camera/Audio updated successfully");
 
-// Trick: Negotiation anstoßen, wenn nötig
-if (pc) {
-  setInfoMsg("[DEBUG] Forcing negotiation after camera change");
-  pc.dispatchEvent(new Event("negotiationneeded"));
-}
-	
+    // Negotiation anstoßen wenn nötig
+    if (pc && pc.signalingState === "stable") {
+      setInfoMsg("[DEBUG] Forcing negotiation after camera change");
+      pc.dispatchEvent(new Event("negotiationneeded"));
+    }
 
   } catch (err) {
     console.error("startLocalStreamAndOffer error:", err);
@@ -964,38 +915,66 @@ if (pc) {
   }
 }
 
-
 function disableAudio() {
   setInfoMsg("disableAudio");
   audioSetting = false;
-  if (localStream) { localStream.getAudioTracks().forEach(t => t.enabled = false); }
+  if (localStream) { 
+    localStream.getAudioTracks().forEach(t => t.enabled = false); 
+  }
   document.getElementById('audioBtn').textContent = 'audio on';
 }
 
-
+// ? OPTIMIERT: Memory Leak Fix - alle Ressourcen sauber freigeben
 function stopAll() {
   setInfoMsg("stopAll");
   setAppState(ConnectionState.IDLE);
   localOfferSent = false;
   
+  // ? NEU: Video-Elemente sauber leeren
+  const localVideoEl = document.getElementById('localVideo');
+  const remoteVideoEl = document.getElementById('remoteVideo');
+  
+  if (localVideoEl) {
+    localVideoEl.pause();
+    localVideoEl.srcObject = null;
+  }
+  
+  if (remoteVideoEl) {
+    remoteVideoEl.pause();
+    remoteVideoEl.srcObject = null;
+  }
+  
   if (myRole === "sender") {
     ws.send(JSON.stringify({ type: "senderStatus", active: false, roomId: ROOM_ID }));
   }
 
-  // --- PeerConnection sauber schließen ---
+  // ? OPTIMIERT: PeerConnection mit allen Tracks stoppen
   if (pc) {
+    pc.getSenders().forEach(sender => {
+      if (sender.track) sender.track.stop();
+    });
+    
     pc.oniceconnectionstatechange = null;
     pc.onconnectionstatechange = null;
+    pc.onnegotiationneeded = null;
     pc.onicecandidate = null;
     pc.ontrack = null;
     pc.close();
     pc = null;
   }
   
+  // ? OPTIMIERT: LocalStream vollständig stoppen
   if (localStream) {
-    localStream.getTracks().forEach(t => t.stop());
+    localStream.getTracks().forEach(t => {
+      t.stop();
+      t.enabled = false;
+    });
     localStream = null;
   }
+  
+  // ? NEU: ICE-Queue zurücksetzen
+  iceCandidateQueue = [];
+  
   const senderBtn = document.getElementById('senderBtn');
   const receiverBtn = document.getElementById('receiverBtn');
 
@@ -1003,46 +982,30 @@ function stopAll() {
   receiverBtn.disabled = false;
   senderBtn.classList.remove('active');
   receiverBtn.classList.remove('active');
-const led = receiverBtn.querySelector('.led');
-if (led) led.classList.remove('on'); // LED ausschalten
+  
+  const led = receiverBtn.querySelector('.led');
+  if (led) led.classList.remove('on');
+  
   document.getElementById('stopBtn').style.display = 'none';
   document.getElementById('cameraSelect').style.display = 'none';
   document.getElementById('blackoutArea').style.display = 'none';
 
-  // hier prüfen ob Sender aktiv ist
   if (window.senderActive) {
     senderBtn.disabled = true;
     senderBtn.textContent = "sender (locked)";
   }
 }
 
-
 function attemptReconnectWithDelay(seconds) {
   setInfoMsg("try reconnect");
   setTimeout(() => {
     if (!pc || pc.iceConnectionState === 'disconnected') {
       setInfoMsg("[DEBUG] try to reconnect");
-      stopAll(); if (myRole) start(myRole);
+      stopAll(); 
+      if (myRole) start(myRole);
     }
   }, seconds * 1000);
 }
-
-// Passwort anzeigen, wenn auf das App-Icon geklickt wird
-//document.addEventListener("DOMContentLoaded", () => {
-//  const appIcon = document.querySelector(".app-icon");
-//  if (appIcon) {
-//    appIcon.addEventListener("click", async () => {
-//      try {
-//        const res = await fetch("/get-master-password");
-//        if (!res.ok) throw new Error("Serverfehler");
-//        const data = await res.json();
-//        alert("Master password: " + data.password);
-//      } catch (err) {
-//        alert("Fehler beim Abrufen des Passworts: " + err);
-//      }
-//    });
-//  }
-//});
 
 </script>
 </body>

@@ -159,7 +159,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v83
+   <span>robocam</span>v85
    <input type="text" id="infoMsg" style="margin-left: 10px;">
    <input type="text" id="infoMode" style="margin-left: 10px;">
   </div>
@@ -664,11 +664,6 @@ async function startSender() {
   pc = createPeerConnection(iceServers); 
   determineConnectionType();
 
-  // ? KRITISCH: Transceiver VOR onnegotiationneeded hinzufügen
-  setInfoMsg("[DEBUG] Sender: adding sendrecv transceivers");
-  pc.addTransceiver("video", { direction: "sendrecv" });
-  pc.addTransceiver("audio", { direction: "sendrecv" });
-
   pc.onnegotiationneeded = async () => {
     try {
       makingOffer = true;
@@ -685,6 +680,7 @@ async function startSender() {
 
   pc.onconnectionstatechange = () => {
     if (!pc) return;
+    setInfoMsg("[DEBUG] Connection state: " + pc.connectionState);
     if (pc.connectionState === "connected") {
       const receivers = pc.getReceivers();
       receivers.forEach(r => {
@@ -699,7 +695,10 @@ async function startSender() {
     }
   };
  
-  pc.onicecandidate = e => { if (e.candidate) ws.send(JSON.stringify({ candidate: e.candidate })); };
+  pc.onicecandidate = e => { 
+    if (e.candidate) ws.send(JSON.stringify({ candidate: e.candidate })); 
+  };
+  
   pc.oniceconnectionstatechange = () => {
     if (!pc) return;
     setInfoMsg("[DEBUG] ICE state:", pc.iceConnectionState);
@@ -712,12 +711,15 @@ async function startSender() {
     }
   };
 
+  // ? WICHTIG: Erst Local Stream starten, DANN Tracks hinzufügen
   const select = document.getElementById('cameraSelect');
   select.style.display = 'block';
   await startLocalStream();
   await fillCameraSelect();
   setInfoMsg("sending");
-  select.onchange = () => setAppState(ConnectionState.IDLE);
+  select.onchange = async () => {
+    await startLocalStreamAndOffer();
+  };
 }
 
 async function startReceiver() {
@@ -738,19 +740,21 @@ async function startReceiver() {
   pc = createPeerConnection(iceServers); 
   determineConnectionType();
 
-  // ? KRITISCH: Transceiver VOR anderen Handlers hinzufügen
+  // ? WICHTIG: ontrack MUSS vor transceivers gesetzt werden
+  pc.ontrack = e => {
+    setInfoMsg("[DEBUG] ontrack fired - streams:", e.streams.length);
+    if (e.streams && e.streams[0]) {
+      setInfoMsg("[DEBUG] Setting remote video stream");
+      remoteVideo.srcObject = e.streams[0];
+      safePlay(remoteVideo);
+      setInfoMsg("receiving video/audio");
+    }
+  };
+
+  // Dann Transceiver hinzufügen
   setInfoMsg("[DEBUG] Receiver: adding recvonly transceivers");
   pc.addTransceiver("video", { direction: "recvonly" });
   pc.addTransceiver("audio", { direction: "recvonly" });
-
-  pc.ontrack = e => {
-    setInfoMsg("[DEBUG] track received:", e.streams);
-    if (remoteVideo.srcObject !== e.streams[0]) {
-      remoteVideo.srcObject = e.streams[0];
-    }
-    safePlay(remoteVideo);
-    setInfoMsg("receiving");
-  };
   
   pc.onconnectionstatechange = () => {
     if (!pc) return;
@@ -849,7 +853,7 @@ async function startLocalStream() {
 
 let lastCameraId = null;
 
-// ? OPTIMIERT: Verbesserte Camera-Switching-Logik mit Track-Ersetzung
+// ? KRITISCH: startLocalStreamAndOffer muss Tracks zur PeerConnection hinzufügen
 async function startLocalStreamAndOffer() {
   try {
     setInfoMsg("startLocalStreamAndOffer");
@@ -857,7 +861,7 @@ async function startLocalStreamAndOffer() {
     const select = document.getElementById('cameraSelect');
     const videoConstraints = select.value ? { deviceId: { exact: select.value } } : true;
 
-    // ? NEU: Prüfen ob bereits die gleiche Kamera aktiv ist
+    // Prüfen ob bereits die gleiche Kamera aktiv ist
     if (localStream && localStream.active) {
       const currentVideoTrack = localStream.getVideoTracks()[0];
       if (currentVideoTrack && currentVideoTrack.getSettings().deviceId === select.value) {
@@ -871,50 +875,49 @@ async function startLocalStreamAndOffer() {
       audio: audioSetting
     });
 
+    const newVideoTrack = newStream.getVideoTracks()[0];
+    const newAudioTrack = newStream.getAudioTracks()[0];
+
     if (pc) {
       const senders = pc.getSenders();
-      const videoSender = senders.find(s => s.track && s.track.kind === "video");
-      const audioSender = senders.find(s => s.track && s.track.kind === "audio");
-      
-      const newVideoTrack = newStream.getVideoTracks()[0];
-      const newAudioTrack = newStream.getAudioTracks()[0];
+      const videoSender = senders.find(s => s.track?.kind === "video");
+      const audioSender = senders.find(s => s.track?.kind === "audio");
 
-      // ? KRITISCH: Nur replaceTrack verwenden, KEIN addTrack
-      if (videoSender && newVideoTrack) {
+      // ? WICHTIG: Beim ersten Mal addTrack, danach replaceTrack
+      if (videoSender) {
         setInfoMsg("[DEBUG] Replacing video track");
         await videoSender.replaceTrack(newVideoTrack);
-      } else if (!videoSender && newVideoTrack) {
-        // Nur beim ersten Mal addTrack
-        setInfoMsg("[DEBUG] Adding initial video track");
+      } else if (newVideoTrack) {
+        setInfoMsg("[DEBUG] Adding video track to PeerConnection");
         pc.addTrack(newVideoTrack, newStream);
       }
 
-      if (audioSender && newAudioTrack) {
+      if (audioSender) {
         setInfoMsg("[DEBUG] Replacing audio track");
         await audioSender.replaceTrack(newAudioTrack);
-      } else if (!audioSender && newAudioTrack) {
-        setInfoMsg("[DEBUG] Adding initial audio track");
+      } else if (newAudioTrack) {
+        setInfoMsg("[DEBUG] Adding audio track to PeerConnection");
         pc.addTrack(newAudioTrack, newStream);
       }
     }
 
+    // Lokales Video aktualisieren
     localVideo.srcObject = newStream;
-    try { await localVideo.play(); } catch (err) { console.warn("localVideo play error:", err); }
+    try { 
+      await localVideo.play(); 
+    } catch (err) { 
+      console.warn("localVideo play error:", err); 
+    }
 
-    // ? NEU: Alten Stream ordentlich stoppen
+    // Alten Stream stoppen
     if (localStream && localStream !== newStream) {
-      localStream.getTracks().forEach(track => {
-        track.stop();
-      });
+      localStream.getTracks().forEach(track => track.stop());
     }
     
     localStream = newStream;
     lastCameraId = select.value;
 
-    setInfoMsg("Camera/Audio updated successfully");
-
-    // ? ENTFERNT: Keine manuelle Negotiation mehr triggern
-    // replaceTrack löst automatisch negotiationneeded aus wenn nötig
+    setInfoMsg("Camera/Audio updated - tracks added to PC");
 
   } catch (err) {
     console.error("startLocalStreamAndOffer error:", err);

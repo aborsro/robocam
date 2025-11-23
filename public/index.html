@@ -159,7 +159,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v82
+   <span>robocam</span>v83
    <input type="text" id="infoMsg" style="margin-left: 10px;">
    <input type="text" id="infoMode" style="margin-left: 10px;">
   </div>
@@ -664,6 +664,11 @@ async function startSender() {
   pc = createPeerConnection(iceServers); 
   determineConnectionType();
 
+  // ? KRITISCH: Transceiver VOR onnegotiationneeded hinzufügen
+  setInfoMsg("[DEBUG] Sender: adding sendrecv transceivers");
+  pc.addTransceiver("video", { direction: "sendrecv" });
+  pc.addTransceiver("audio", { direction: "sendrecv" });
+
   pc.onnegotiationneeded = async () => {
     try {
       makingOffer = true;
@@ -677,10 +682,6 @@ async function startSender() {
       makingOffer = false;
     }
   };
-
-  setInfoMsg("[DEBUG] Sender: adding sendrecv transceivers");
-  pc.addTransceiver("video", { direction: "sendrecv" });
-  pc.addTransceiver("audio", { direction: "sendrecv" });
 
   pc.onconnectionstatechange = () => {
     if (!pc) return;
@@ -737,6 +738,7 @@ async function startReceiver() {
   pc = createPeerConnection(iceServers); 
   determineConnectionType();
 
+  // ? KRITISCH: Transceiver VOR anderen Handlers hinzufügen
   setInfoMsg("[DEBUG] Receiver: adding recvonly transceivers");
   pc.addTransceiver("video", { direction: "recvonly" });
   pc.addTransceiver("audio", { direction: "recvonly" });
@@ -847,7 +849,7 @@ async function startLocalStream() {
 
 let lastCameraId = null;
 
-// ? OPTIMIERT: Verbesserte Camera-Switching-Logik
+// ? OPTIMIERT: Verbesserte Camera-Switching-Logik mit Track-Ersetzung
 async function startLocalStreamAndOffer() {
   try {
     setInfoMsg("startLocalStreamAndOffer");
@@ -870,20 +872,28 @@ async function startLocalStreamAndOffer() {
     });
 
     if (pc) {
-      const videoSender = pc.getSenders().find(s => s.track && s.track.kind === "video");
+      const senders = pc.getSenders();
+      const videoSender = senders.find(s => s.track && s.track.kind === "video");
+      const audioSender = senders.find(s => s.track && s.track.kind === "audio");
+      
       const newVideoTrack = newStream.getVideoTracks()[0];
+      const newAudioTrack = newStream.getAudioTracks()[0];
 
+      // ? KRITISCH: Nur replaceTrack verwenden, KEIN addTrack
       if (videoSender && newVideoTrack) {
+        setInfoMsg("[DEBUG] Replacing video track");
         await videoSender.replaceTrack(newVideoTrack);
-      } else if (newVideoTrack) {
+      } else if (!videoSender && newVideoTrack) {
+        // Nur beim ersten Mal addTrack
+        setInfoMsg("[DEBUG] Adding initial video track");
         pc.addTrack(newVideoTrack, newStream);
       }
 
-      const audioSender = pc.getSenders().find(s => s.track && s.track.kind === "audio");
-      const newAudioTrack = newStream.getAudioTracks()[0];
       if (audioSender && newAudioTrack) {
+        setInfoMsg("[DEBUG] Replacing audio track");
         await audioSender.replaceTrack(newAudioTrack);
-      } else if (newAudioTrack) {
+      } else if (!audioSender && newAudioTrack) {
+        setInfoMsg("[DEBUG] Adding initial audio track");
         pc.addTrack(newAudioTrack, newStream);
       }
     }
@@ -903,11 +913,8 @@ async function startLocalStreamAndOffer() {
 
     setInfoMsg("Camera/Audio updated successfully");
 
-    // Negotiation anstoßen wenn nötig
-    if (pc && pc.signalingState === "stable") {
-      setInfoMsg("[DEBUG] Forcing negotiation after camera change");
-      pc.dispatchEvent(new Event("negotiationneeded"));
-    }
+    // ? ENTFERNT: Keine manuelle Negotiation mehr triggern
+    // replaceTrack löst automatisch negotiationneeded aus wenn nötig
 
   } catch (err) {
     console.error("startLocalStreamAndOffer error:", err);

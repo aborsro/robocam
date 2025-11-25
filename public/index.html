@@ -346,6 +346,7 @@ async function processIceCandidateQueue() {
 
 function createPeerConnection(servers) {
   pc = new RTCPeerConnection({ iceServers: servers });
+//  pc = new RTCPeerConnection({ iceServers, iceTransportPolicy: "relay" });
 
   pc.oniceconnectionstatechange = () => {
     if (!pc) return;

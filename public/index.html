@@ -159,7 +159,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v85
+   <span>robocam</span>v86
    <input type="text" id="infoMsg" style="margin-left: 10px;">
    <input type="text" id="infoMode" style="margin-left: 10px;">
   </div>
@@ -293,19 +293,6 @@ function setAppState(state) {
 
   const localStatus = document.getElementById('localStatus');
   if (localStatus) localStatus.textContent = `Status: ${state}`; 
-  
-  // Auto-restart logic for sender
-  if (myRole === "sender" && (state === ConnectionState.IDLE || state === ConnectionState.WAITING)) {
-    clearTimeout(idleRestartTimer);
-    idleRestartTimer = setTimeout(() => {
-      if ((appState === ConnectionState.IDLE)||(appState === ConnectionState.WAITING)) {
-        setInfoMsg("[DEBUG] Sender idle/waiting for 5s – restarting...");
-        start("sender");
-      }
-    }, 5000);
-  } else {
-    clearTimeout(idleRestartTimer);
-  }
 }
 
 let localStream;
@@ -467,17 +454,17 @@ async function handleMessage(msg) {
       console.error("JSON parse error:", err, text);
       return;
     }
-  
+
     if (data.type === "error") {
       alert(data.message);
       stopAll();
-	  return;
+      return;
     }
-	
+
     if (data.type === "senderStatus") {
       const senderBtn = document.getElementById("senderBtn");
       window.senderActive = data.active;
-    
+
       if (data.active) {
         senderBtn.disabled = true;
         senderBtn.textContent = "sender (locked)";
@@ -488,83 +475,75 @@ async function handleMessage(msg) {
       return;
     }
 
-    // ? OPTIMIERT: SDP-Handling mit verbesserter Offer-Collision
+    if (!pc) return;
+
+    // SDP handling
     if (data.sdp) {
-      if (!pc) return;
-      try {
-        const description = new RTCSessionDescription(data.sdp);
-        const isOffer = description.type === "offer";
-        const offerCollision = isOffer && (makingOffer || pc.signalingState !== "stable");
+      const description = new RTCSessionDescription(data.sdp);
+      const isOffer = description.type === "offer";
 
-        if (offerCollision) {
-          if (!polite) {
-            setInfoMsg("[DEBUG] Offer collision - ignoring (impolite)");
-            return;
-          }
-          setInfoMsg("[DEBUG] Offer collision - polite peer: rollback local offer");
-          try {
-            await pc.setLocalDescription({ type: "rollback" });
-            makingOffer = false; // ? NEU: Flag zurücksetzen
-          } catch (rbErr) {
-            console.warn("Rollback failed (might be ok):", rbErr);
-          }
-        }
+      // Offer collision
+      const offerCollision = isOffer && (makingOffer || pc.signalingState !== "stable");
 
-        if (description.type === "answer") {
-          if (pc.signalingState !== "have-local-offer") {
-            console.warn("Answer ignored – wrong signaling state:", pc.signalingState);
-            return;
-          }
-          await pc.setRemoteDescription(description);
-          setInfoMsg("received answer");
-          
-          // ? NEU: Queue nach Answer abarbeiten
-          await processIceCandidateQueue();
+      if (offerCollision) {
+        if (!polite) {
+          setInfoMsg("[DEBUG] Offer collision – ignored (impolite peer)");
           return;
         }
+        setInfoMsg("[DEBUG] Offer collision – polite peer: rollback local offer");
+        try {
+          await pc.setLocalDescription({ type: "rollback" });
+          makingOffer = false;
+        } catch (rbErr) {
+          console.warn("Rollback failed (might be ok):", rbErr);
+        }
+      }
 
-        if (description.type === "offer") {
+      if (description.type === "answer") {
+        if (pc.signalingState === "have-local-offer") {
           await pc.setRemoteDescription(description);
-          
-          // ? NEU: Queue abarbeiten bevor Answer erstellt wird
+          setInfoMsg("[DEBUG] Answer accepted");
           await processIceCandidateQueue();
-          
-          setInfoMsg("creating answer");
+        } else {
+          console.warn("Answer ignored – wrong signaling state:", pc.signalingState);
+        }
+        return;
+      }
+
+      if (description.type === "offer") {
+        try {
+          await pc.setRemoteDescription(description);
+          await processIceCandidateQueue();
+          setInfoMsg("[DEBUG] Creating answer to remote offer");
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           ws.send(JSON.stringify({ sdp: pc.localDescription }));
-          return;
+        } catch (err) {
+          console.error("Failed to handle remote offer:", err);
         }
-
-      } catch (err) {
-        console.error("setRemoteDescription error:", err);
+        return;
       }
-      return;
     }
 
-    // ? OPTIMIERT: ICE-Kandidaten mit Queue-Logik
+    // ICE candidate handling
     if (data.candidate) {
-      if (!pc) return;
-      
-      // Prüfen ob remoteDescription bereits gesetzt ist
       if (!pc.remoteDescription || !pc.remoteDescription.type) {
         setInfoMsg("[DEBUG] Queueing ICE candidate (no remote desc yet)");
         iceCandidateQueue.push(data.candidate);
         return;
       }
-      
       try {
         await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
       } catch (err) {
         console.error("addIceCandidate error:", err);
       }
-      return;
     }
 
   } catch (err) {
     console.error("handleMessage error:", err);
   }
 }
+
 
 let playPromise;
 
@@ -866,7 +845,7 @@ async function startLocalStreamAndOffer() {
       const currentVideoTrack = localStream.getVideoTracks()[0];
       if (currentVideoTrack && currentVideoTrack.getSettings().deviceId === select.value) {
         setInfoMsg("Same camera already active");
-        return;
+//        return;
       }
     }
 
@@ -943,7 +922,9 @@ function stopAll() {
   // ? NEU: Video-Elemente sauber leeren
   const localVideoEl = document.getElementById('localVideo');
   const remoteVideoEl = document.getElementById('remoteVideo');
-  
+  const infoField = document.getElementById("infoMode");
+  infoField.value = "";
+ 
   if (localVideoEl) {
     localVideoEl.pause();
     localVideoEl.srcObject = null;

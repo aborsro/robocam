@@ -159,7 +159,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v86
+   <span>robocam</span>v90
    <input type="text" id="infoMsg" style="margin-left: 10px;">
    <input type="text" id="infoMode" style="margin-left: 10px;">
   </div>
@@ -199,6 +199,11 @@ const toggleBtn = document.getElementById("toggleSizeBtn");
 let pc;
 let ws;
 let role;
+
+// --- Receiver/Sender Sync ---
+let receiverReady = false;
+let pendingSenderStart = false;
+
 let full = false;
 let idleRestartTimer = null;
 let isNegotiating = false;
@@ -346,7 +351,6 @@ async function processIceCandidateQueue() {
 
 function createPeerConnection(servers) {
   pc = new RTCPeerConnection({ iceServers: servers });
-//  pc = new RTCPeerConnection({ iceServers, iceTransportPolicy: "relay" });
 
   pc.oniceconnectionstatechange = () => {
     if (!pc) return;
@@ -358,11 +362,6 @@ function createPeerConnection(servers) {
     if (pc.iceConnectionState === 'connected') {
       setAppState(ConnectionState.CONNECTED);
     }
-  };
-
-  pc.onconnectionstatechange = () => {
-    if (!pc) return;
-    setInfoMsg("[DEBUG] Connection state: " + pc.connectionState);
   };
 
   pc.onicecandidate = e => {
@@ -392,6 +391,14 @@ function connectWebSocket() {
     setInfoMsg("[DEBUG] WebSocket connected");
     if (myRole)
       ws.send(JSON.stringify({ type: "register", role: myRole, roomId: ROOM_ID }));
+	  
+    // ?? NEU: Receiver meldet sich IMMER ready
+    if (myRole === "receiver") {
+      ws.send(JSON.stringify({
+        type: "receiverReady",
+        roomId: ROOM_ID
+      }));
+    }	  
     setAppState(ConnectionState.WAITING);
   };
 
@@ -456,9 +463,46 @@ async function handleMessage(msg) {
       return;
     }
 
+    if (data.type === "senderStarted") {
+      setInfoMsg("[SYNC] sender confirmed start");
+    
+      senderConfirmed = true;
+    
+      if (receiverReadyInterval) {
+        clearInterval(receiverReadyInterval);
+        receiverReadyInterval = null;
+      }
+      return;
+    }
+	
+	
+    if (data.type === "receiverGone") {
+      setInfoMsg("[SYNC] receiverGone");  
+      receiverReady = false;
+      senderConfirmed = false;
+      if (myRole === "sender") {
+        stopAll();              // ?? HARD RESET
+        pendingSenderStart = true;
+     }
+     return;
+   }
+
+	
+    if (data.type === "receiverReady") {
+      setInfoMsg("[SYNC] Receiver ready");
+    
+      receiverReady = true;
+   
+      if (pendingSenderStart && myRole === 'sender') {
+        pendingSenderStart = false;
+        startSender();   // ? jetzt wirklich starten
+      }
+      return;
+    }
+	
     if (data.type === "error") {
       alert(data.message);
-      stopAll();
+      //stopAll();
       return;
     }
 
@@ -588,8 +632,20 @@ async function start(role) {
   senderBtn.textContent = "send";
   receiverBtn.textContent = "receive";
 
-  if (role === 'sender') { startSender(); } 
-  else { startReceiver(); }
+  if (role === 'sender') {
+  
+    stopBtn.style.display = 'block';   // ? sofort sichtbar
+    senderBtn.classList.add('active');
+    setAppState(ConnectionState.WAITING);
+  
+    if (!receiverReady) {
+      setInfoMsg("[SYNC] Waiting for receiver...");
+      pendingSenderStart = true;
+      return;
+    }
+  
+    startSender();
+  } else { startReceiver(); }  
 }
   
 function determineConnectionType() {
@@ -660,7 +716,6 @@ async function startSender() {
 
   pc.onconnectionstatechange = () => {
     if (!pc) return;
-    setInfoMsg("[DEBUG] Connection state: " + pc.connectionState);
     if (pc.connectionState === "connected") {
       const receivers = pc.getReceivers();
       receivers.forEach(r => {
@@ -688,6 +743,8 @@ async function startSender() {
     }
     if (['connected'].includes(pc.iceConnectionState)) {
       setAppState(ConnectionState.CONNECTED);
+	  ws.send(JSON.stringify({ type: "senderStarted",  roomId: ROOM_ID
+      }));
     }
   };
 
@@ -696,14 +753,16 @@ async function startSender() {
   select.style.display = 'block';
   await startLocalStream();
   await fillCameraSelect();
-  setInfoMsg("sending");
+
   select.onchange = async () => {
     await startLocalStreamAndOffer();
   };
 }
 
 async function startReceiver() {
+  console.log("### startReceiver ENTERED ###");
   setInfoMsg("start receiver");
+
   receiverBtn.classList.add('active');
   const led = receiverBtn.querySelector('.led');
   if (led) led.classList.add('on');
@@ -735,6 +794,17 @@ async function startReceiver() {
   setInfoMsg("[DEBUG] Receiver: adding recvonly transceivers");
   pc.addTransceiver("video", { direction: "recvonly" });
   pc.addTransceiver("audio", { direction: "recvonly" });
+
+  function sendReceiverReady() {
+    setInfoMsg("[SYNC] sending receiverReady");
+    ws.send(JSON.stringify({ type: "receiverReady", roomId: ROOM_ID }));
+  }
+  
+  if (ws.readyState === WebSocket.OPEN) {
+    sendReceiverReady();
+  } else {
+    ws.addEventListener("open", sendReceiverReady, { once: true });
+  }
   
   pc.onconnectionstatechange = () => {
     if (!pc) return;
@@ -763,6 +833,31 @@ async function startReceiver() {
       setAppState(ConnectionState.CONNECTED);
     }
   };
+  console.log("### startReceiver END reached ###");
+
+  setInfoMsg("[SYNC] sending receiverReady");
+  ws.send(JSON.stringify({
+    type: "receiverReady",
+    roomId: ROOM_ID
+  }));
+  
+  function startReceiverReadyLoop() {
+   senderConfirmed = false;
+ 
+   if (receiverReadyInterval) {
+     clearInterval(receiverReadyInterval);
+   }
+ 
+   receiverReadyInterval = setInterval(() => {
+     if (ws.readyState === WebSocket.OPEN && !senderConfirmed) {
+       setInfoMsg("[SYNC] sending receiverReady (repeat)");
+       ws.send(JSON.stringify({
+         type: "receiverReady",
+         roomId: ROOM_ID
+       }));
+     }
+   }, 1000); // 1 Sekunde ist völlig ok
+ }
 }
 
 let getUserMediaDone = false;
@@ -919,12 +1014,20 @@ function stopAll() {
   setInfoMsg("stopAll");
   setAppState(ConnectionState.IDLE);
   localOfferSent = false;
-  
+  receiverReady = false;
+  pendingSenderStart = false;
+
   // ? NEU: Video-Elemente sauber leeren
   const localVideoEl = document.getElementById('localVideo');
   const remoteVideoEl = document.getElementById('remoteVideo');
   const infoField = document.getElementById("infoMode");
   infoField.value = "";
+ 
+  if (receiverReadyInterval) {
+     clearInterval(receiverReadyInterval);
+    receiverReadyInterval = null;
+  }
+  senderConfirmed = false;
  
   if (localVideoEl) {
     localVideoEl.pause();

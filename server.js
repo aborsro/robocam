@@ -77,6 +77,16 @@ wss.on("connection", ws => {
     let data;
     try { data = JSON.parse(message); } catch { return; }
 
+    // --- Receiver READY Sync ---
+    if (data.type === "receiverReady") {
+      console.log("receiverReady received");
+    
+      if (currentSender && currentSender.readyState === WebSocket.OPEN) {
+        currentSender.send(JSON.stringify({ type: "receiverReady" }));
+      }
+      return;
+    }
+	
     if (data.type === "register") {
       if (data.role === "sender") {
         if (currentSender && currentSender !== ws) {
@@ -111,6 +121,11 @@ wss.on("connection", ws => {
     if (ws === currentSender) {
       currentSender = null;
       broadcast({ type: "senderStatus", active: false });
+    }
+	if (ws !== currentSender) {
+      if (currentSender && currentSender.readyState === WebSocket.OPEN) {
+         currentSender.send(JSON.stringify({ type: "receiverGone" }));
+      }
     }
   });
 });

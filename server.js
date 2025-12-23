@@ -78,9 +78,7 @@ wss.on("connection", ws => {
     try { data = JSON.parse(message); } catch { return; }
 
     // --- Receiver READY Sync ---
-    if (data.type === "receiverReady") {
-      console.log("receiverReady received");
-    
+    if (data.type === "receiverReady") {    
       if (currentSender && currentSender.readyState === WebSocket.OPEN) {
         currentSender.send(JSON.stringify({ type: "receiverReady" }));
       }

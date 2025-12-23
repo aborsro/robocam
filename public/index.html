@@ -391,14 +391,6 @@ function connectWebSocket() {
     setInfoMsg("[DEBUG] WebSocket connected");
     if (myRole)
       ws.send(JSON.stringify({ type: "register", role: myRole, roomId: ROOM_ID }));
-	  
-    // ?? NEU: Receiver meldet sich IMMER ready
-    if (myRole === "receiver") {
-      ws.send(JSON.stringify({
-        type: "receiverReady",
-        roomId: ROOM_ID
-      }));
-    }	  
     setAppState(ConnectionState.WAITING);
   };
 
@@ -463,36 +455,18 @@ async function handleMessage(msg) {
       return;
     }
 
-    if (data.type === "senderStarted") {
-      setInfoMsg("[SYNC] sender confirmed start");
-    
-      senderConfirmed = true;
-    
-      if (receiverReadyInterval) {
-        clearInterval(receiverReadyInterval);
-        receiverReadyInterval = null;
-      }
+    // --- Receiver disconnected / gone ---
+    if (data.type === "receiverGone") {
+      setInfoMsg("[SYNC] Receiver gone");
+      receiverReady = false;
       return;
     }
-	
-	
-    if (data.type === "receiverGone") {
-      setInfoMsg("[SYNC] receiverGone");  
-      receiverReady = false;
-      senderConfirmed = false;
-      if (myRole === "sender") {
-        stopAll();              // ?? HARD RESET
-        pendingSenderStart = true;
-     }
-     return;
-   }
-
 	
     if (data.type === "receiverReady") {
       setInfoMsg("[SYNC] Receiver ready");
     
       receiverReady = true;
-   
+    
       if (pendingSenderStart && myRole === 'sender') {
         pendingSenderStart = false;
         startSender();   // ? jetzt wirklich starten
@@ -743,8 +717,6 @@ async function startSender() {
     }
     if (['connected'].includes(pc.iceConnectionState)) {
       setAppState(ConnectionState.CONNECTED);
-	  ws.send(JSON.stringify({ type: "senderStarted",  roomId: ROOM_ID
-      }));
     }
   };
 
@@ -840,24 +812,6 @@ async function startReceiver() {
     type: "receiverReady",
     roomId: ROOM_ID
   }));
-  
-  function startReceiverReadyLoop() {
-   senderConfirmed = false;
- 
-   if (receiverReadyInterval) {
-     clearInterval(receiverReadyInterval);
-   }
- 
-   receiverReadyInterval = setInterval(() => {
-     if (ws.readyState === WebSocket.OPEN && !senderConfirmed) {
-       setInfoMsg("[SYNC] sending receiverReady (repeat)");
-       ws.send(JSON.stringify({
-         type: "receiverReady",
-         roomId: ROOM_ID
-       }));
-     }
-   }, 1000); // 1 Sekunde ist völlig ok
- }
 }
 
 let getUserMediaDone = false;
@@ -1022,12 +976,6 @@ function stopAll() {
   const remoteVideoEl = document.getElementById('remoteVideo');
   const infoField = document.getElementById("infoMode");
   infoField.value = "";
- 
-  if (receiverReadyInterval) {
-     clearInterval(receiverReadyInterval);
-    receiverReadyInterval = null;
-  }
-  senderConfirmed = false;
  
   if (localVideoEl) {
     localVideoEl.pause();

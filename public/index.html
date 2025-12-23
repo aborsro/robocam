@@ -159,7 +159,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v90
+   <span>robocam</span>v91
    <input type="text" id="infoMsg" style="margin-left: 10px;">
    <input type="text" id="infoMode" style="margin-left: 10px;">
   </div>
@@ -167,7 +167,7 @@ video {
   <div class="top-bar">
    <div class="buttons">
   	 	<div id="controls">
-       <button id="toggleSizeBtn">?? wide</button>
+       <button id="toggleSizeBtn">📺 wide</button>
     </div>
      <button id="senderBtn" onclick="start('sender')">send</button>
 <button id="receiverBtn" onclick="start('receiver')">
@@ -216,11 +216,11 @@ toggleBtn.onclick = () => {
   if (full) {
     localVideo.classList.add("fullwidth");
     remoteVideo.classList.add("fullwidth");
-    toggleBtn.textContent = "?? normal";
+    toggleBtn.textContent = "🔙 normal";
   } else {
     localVideo.classList.remove("fullwidth");
     remoteVideo.classList.remove("fullwidth");
-    toggleBtn.textContent = "?? wide";
+    toggleBtn.textContent = "📺 wide";
   }
 };
 

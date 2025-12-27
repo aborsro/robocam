@@ -205,16 +205,19 @@ button.active {
   #blackoutBtn { background-color: grey; opacity: 1; z-index: 99999; }
   #audioBtn { background-color: grey; opacity: 1; z-index: 99998; }
 #blackoutArea {
-    display: none;
-    position: fixed; /* Fixes it to the screen even if scrolling */
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: black;
-    z-index: 999999; /* Higher than everything else */
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent; /* Removes the gray flash on tap */
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: #000000 !important;
+  z-index: 2147483647 !important; /* Forces it above everything else */
+  cursor: pointer;
+  /* Prevents iPhone "bounce" or scrolling while blacked out */
+  touch-action: none; 
 }
   #controls { margin-bottom: 15px; }
 
@@ -673,28 +676,26 @@ async function blackoutScreen() {
     const blackoutArea = document.getElementById('blackoutArea');
     const btn = document.getElementById('blackoutBtn');
 
-    // If currently off, turn it on
+    // If it's hidden, show it
     if (blackoutArea.style.display === 'none' || blackoutArea.style.display === '') {
         
-        // Try real fullscreen (Works on PC and Android)
+        // 1. Show the black div immediately (Works on iPhone)
+        blackoutArea.style.display = 'block';
+        btn.textContent = 'display';
+
+        // 2. Try to go Fullscreen (Works on PC/Android, fails gracefully on iPhone)
         try {
             if (document.documentElement.requestFullscreen) {
                 await document.documentElement.requestFullscreen();
             } else if (document.documentElement.webkitRequestFullscreen) {
-                // This might work on iPads and some Safari versions
                 await document.documentElement.webkitRequestFullscreen();
             }
         } catch (err) {
-            console.log("Native fullscreen blocked, using cover mode.");
+            console.log("Native fullscreen not supported/allowed on this device.");
         }
-
-        // Apply visual blackout (Works on ALL devices including iPhone)
-        blackoutArea.style.display = 'block';
-        btn.textContent = 'display';
-        setInfoMsg("Blackout active - Tap screen to exit");
         
+        setInfoMsg("Blackout active - Tap to exit");
     } else {
-        // Turn it off
         exitBlackout();
     }
 }
@@ -703,17 +704,21 @@ function exitBlackout() {
     const blackoutArea = document.getElementById('blackoutArea');
     const btn = document.getElementById('blackoutBtn');
 
-    // Exit real fullscreen if active
-    if (document.fullscreenElement || document.webkitFullscreenElement) {
-        if (document.exitFullscreen) document.exitFullscreen();
-        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-    }
-
+    // Hide the div
     blackoutArea.style.display = 'none';
     btn.textContent = 'blackout';
+
+    // Exit fullscreen if the device supports it
+    try {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+        }
+    } catch (e) { /* ignore */ }
 }
 
-// Ensure tapping the black screen always exits
+// Ensure clicking the black screen exits it on iPhone
 document.getElementById('blackoutArea').onclick = exitBlackout;
 
 // Handle the "Esc" key on PC

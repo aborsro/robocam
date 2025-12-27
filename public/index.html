@@ -658,13 +658,53 @@ connectWebSocket();
 audioSetting = true;
 setAudioTracks(audioSetting);
 
+async function blackoutScreen() {
+    const blackoutArea = document.getElementById('blackoutArea');
+    const btn = document.getElementById('blackoutBtn');
+    
+    // 1. If not currently fullscreen, enter it
+    if (!document.fullscreenElement) {
+        try {
+            if (document.documentElement.requestFullscreen) {
+                await document.documentElement.requestFullscreen();
+            } else if (document.documentElement.webkitRequestFullscreen) { // Safari/iOS
+                await document.documentElement.webkitRequestFullscreen();
+            }
+            
+            blackoutArea.style.display = 'block';
+            btn.textContent = 'display';
+            setInfoMsg("Blackout active (Click screen or press ESC to exit)");
 
-function blackoutScreen() {
-  blackOut = !blackOut;
-  document.getElementById('blackoutArea').style.display = blackOut ? 'block' : 'none';
-  document.getElementById('blackoutBtn').textContent = blackOut ? 'display' : 'blackout';
+        } catch (err) {
+            console.warn("Fullscreen blocked or failed:", err);
+            // Fallback: Just black out the browser window
+            blackoutArea.style.display = 'block';
+        }
+    } else {
+        // 2. If already fullscreen, exit it
+        exitBlackout();
+    }
 }
 
+// Separate function to clean up states
+function exitBlackout() {
+    if (document.fullscreenElement) {
+        if (document.exitFullscreen) document.exitFullscreen();
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    }
+    document.getElementById('blackoutArea').style.display = 'none';
+    document.getElementById('blackoutBtn').textContent = 'blackout';
+}
+
+// PC: Listen for the "Esc" key to reset the button text
+document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement) {
+        exitBlackout();
+    }
+});
+
+// PC & Handy: Click/Tap the black screen to exit
+document.getElementById('blackoutArea').addEventListener('click', exitBlackout);
 
 function setAudioTracks(state) {
   audioSetting = state; // Globalen Status setzen

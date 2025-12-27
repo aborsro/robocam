@@ -23,6 +23,29 @@
   font-size: 14px;
 }
 
+#audioMeterContainer {
+    display: none;    /* Hidden by default */
+    position: absolute;   /* Absolute within the relative container */
+    bottom: 40px;         /* Positioned above the status text */
+    left: 10px;
+    width: 125px;         /* Smaller width for overlay style */
+    height: 6px;
+    background: rgba(51, 51, 51, 0.8); /* Semi-transparent background */
+    z-index: 10;
+    overflow: hidden;
+    border-radius: 3px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    pointer-events: none; /* Allows clicks to pass through to the video */
+}
+
+#audioMeterBar {
+    width: 0%;
+    height: 100%;
+    background-color: #00FF00;
+    box-shadow: 0 0 8px #00FF00; /* Subtle glow */
+    transition: width 0.1s ease-out;
+}
+
   #app { display: none; }
   #statusDisplay { margin-top: 10px; font-weight: bold; }
   .top-bar { display: flex; align-items: left; justify-content: left; gap: 10px; flex-wrap: wrap; width: 100%; max-width: 600px; margin-bottom: 10px; }
@@ -30,41 +53,146 @@
   .app-icon { width: 40px; height: 40px; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.2); }
   h1 { margin: 10px; font-size: 1.8em; color: #333; }
 
-  button, select, #toggleSizeBtn {
-  font-size: 1.0em;
-  margin: 0;
-  width: auto;
-  max-width: none;
+/* ==============================
+   BUTTON NORMALIZATION (FIXED)
+   ============================== */
+
+button,
+select,
+#toggleSizeBtn {
+  box-sizing: border-box;
+  font-size: 14px;
+  height: 36px;
+  min-width: 120px;
+  padding: 0 16px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+
   border: none;
   border-radius: 10px;
   background-color: #808080;
   color: white;
   cursor: pointer;
+
+  line-height: 1;
+  white-space: nowrap;
   transition: background-color 0.3s, transform 0.1s;
-
-  span.led {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  margin-right: 6px;
-  border-radius: 50%;
-  background-color: grey;
-  vertical-align: middle;
-  box-shadow: 0 0 2px rgba(0,0,0,0.5);
-  transition: background-color 0.2s, box-shadow 0.2s;
 }
 
-span.led.on {
-  background-color: red;
-  box-shadow: 0 0 5px red;
+/* Hover / disabled */
+button:hover:enabled {
+  background-color: #45a049;
 }
-  
-  height: 33px;
-  padding: 0 16px;
-  
-  display: flex;
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* Active / special buttons */
+button.active {
+  background-color: #00FF00;
+  transform: scale(1.05);
+}
+
+#stopBtn {
+  background-color: #FF0000;
+}
+
+#stopBtn:hover:enabled {
+  background-color: #d32f2f;
+}
+
+/* ==============================
+   BUTTON NORMALIZATION
+   ============================== */
+
+button,
+select,
+#toggleSizeBtn {
+  box-sizing: border-box;
+  font-size: 14px;
+  height: 36px;
+  min-width: 120px;
+  padding: 0 14px;
+
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
+
+  border: none;
+  border-radius: 10px;
+  background-color: #808080;
+  color: white;
+  cursor: pointer;
+
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* ==============================
+   LED INDICATOR (FIXED)
+   ============================== */
+
+button .led {
+  display: inline-block;       /* <-- REQUIRED */
+  width: 10px;
+  height: 10px;
+  min-width: 10px;             /* <-- prevents flex collapse */
+  min-height: 10px;
+
+  border-radius: 50%;
+  background-color: #555;      /* visible against gray */
+  box-shadow: 0 0 2px black;
+
+  margin-right: 6px;           /* spacing from text */
+}
+
+button .led.on {
+  background-color: red;
+  box-shadow: 0 0 6px red;
+}
+
+/* ==============================
+   STATES
+   ============================== */
+
+button:hover:enabled {
+  background-color: #45a049;
+}
+
+button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+button.active {
+  background-color: #00ff00;
+  transform: scale(1.05);
+}
+
+#stopBtn {
+  background-color: #ff0000;
+}
+
+#stopBtn:hover:enabled {
+  background-color: #d32f2f;
+}
+/* ==============================
+   RESPONSIVE SAFETY
+   ============================== */
+
+@media (max-width: 480px) {
+  button,
+  select,
+  #toggleSizeBtn {
+    min-width: 100px;
+    font-size: 13px;
+  }
 }
 
   button:hover:enabled { background-color: #45a049; }
@@ -134,7 +262,9 @@ video {
 
   .inline-container img { vertical-align: middle; height: 40px; }
   .inline-container span { vertical-align: middle; margin-left: 10px; font-size: 30px; }
+
 </style>
+
 </head>
 <body>
 
@@ -159,7 +289,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v92
+   <span>robocam</span>v93
    <input type="text" id="infoMsg" style="margin-left: 10px;">
    <input type="text" id="infoMode" style="margin-left: 10px;">
   </div>
@@ -182,10 +312,15 @@ video {
   </div>
   
   <div class="video-container">
-    <video id="remoteVideo" autoplay playsinline></video>
-    <div id="remoteStatus" class="status-overlay">Status: idle</div>
+    <video id="remoteVideo" autoplay playsinline muted></video>
+    <audio id="remoteAudio" autoplay playsinline></audio>
+      
+      <div id="audioMeterContainer">
+        <div id="audioMeterBar"></div>
+      </div>
+      
+      <div id="remoteStatus" class="status-overlay">Status: idle</div>
   </div>
-
   <div class="video-container">
     <video id="localVideo" autoplay muted playsinline></video>
     <div id="localStatus" class="status-overlay"></div>
@@ -196,6 +331,7 @@ video {
 const localVideo = document.getElementById("localVideo");
 const remoteVideo = document.getElementById("remoteVideo");
 const toggleBtn = document.getElementById("toggleSizeBtn");
+const meterContainer = document.getElementById("audioMeterContainer");
 let pc;
 let ws;
 let role;
@@ -211,6 +347,63 @@ let makingOffer = false;
 let polite = false;
 let iceCandidateQueue = []; // ? NEU: Queue für frühe ICE candidates
 
+// --- Integrated Audio Control ---
+let audioSetting = true; // For Sender (Mic)
+let isAudioMuted = false; // For Receiver (Speaker)
+// --- Unified Audio Control ---
+function initAudioUI() {
+    const audioBtn = document.getElementById("audioBtn");
+    if (!audioBtn) return;
+
+    // Set initial UI state
+    audioBtn.textContent = "audio on";
+    audioBtn.style.backgroundColor = "#45a049";
+    
+    audioBtn.onclick = () => {
+        // We check 'myRole' dynamically at the moment of the click
+        if (myRole === 'sender') {
+            audioSetting = !audioSetting;
+            applySenderAudio();
+        } else {
+            // Receiver logic: toggle the 'muted' property of the audio element
+            isAudioMuted = !isAudioMuted;
+            applyReceiverAudio();
+        }
+    };
+}
+
+function applySenderAudio() {
+    const btn = document.getElementById('audioBtn');
+    if (localStream) {
+        localStream.getAudioTracks().forEach(track => track.enabled = audioSetting);
+    }
+    btn.textContent = audioSetting ? "audio on" : "audio off";
+    btn.style.backgroundColor = audioSetting ? "#45a049" : "#808080";
+    setInfoMsg(`Mic: ${audioSetting ? 'ON' : 'OFF'}`);
+}
+
+function applyReceiverAudio() {
+    const btn = document.getElementById('audioBtn');
+    const remoteAudio = document.getElementById("remoteAudio");
+    
+    if (remoteAudio) {
+        // Invert: if isAudioMuted is true, element.muted must be true
+        remoteAudio.muted = isAudioMuted;
+        
+        // Browsers often need a fresh .play() call after unmuting
+        if (!isAudioMuted) {
+            remoteAudio.play().catch(e => console.log("Playback interaction required"));
+        }
+    }
+    
+    btn.textContent = !isAudioMuted ? "audio on" : "audio off";
+    btn.style.backgroundColor = !isAudioMuted ? "#45a049" : "#808080";
+    setInfoMsg(`Speaker: ${!isAudioMuted ? 'ON' : 'OFF'}`);
+}
+
+// Call this immediately
+initAudioUI();
+
 toggleBtn.onclick = () => {
   full = !full;
   if (full) {
@@ -223,6 +416,7 @@ toggleBtn.onclick = () => {
     toggleBtn.textContent = "ðŸ“º wide";
   }
 };
+
 
 // --- Login / Passwort-Logik ---
 async function login() {
@@ -279,7 +473,7 @@ setInfoMsg("[DEBUG] Initialising ROBOCAM App");
 
 const ConnectionState = {
   IDLE: 'idle', WAITING: 'waiting', READY: 'ready',
-  CONNECTING: 'connecting', CONNECTED: 'connected', ERROR: 'error',
+  CONNECTING: 'connecting', CONNECTED: 'connected', NOTCONNECTED: 'not connected',
 };
 let appState = ConnectionState.IDLE;
 
@@ -306,7 +500,7 @@ let blackOut = false;
 let remoteOut = true;
 let localOut = true;
 let myRole = null;
-let audioSetting = true;
+
 let fillCameraSelectDone = false;
 let readyInterval = null;
 
@@ -357,7 +551,7 @@ function createPeerConnection(servers) {
     if (!pc) return;
     setInfoMsg("[DEBUG] ICE state: " + pc.iceConnectionState);
     if (['disconnected','failed'].includes(pc.iceConnectionState)) {
-      setAppState(ConnectionState.ERROR);
+      setAppState(ConnectionState.NOTCONNECTED);
       attemptReconnectWithDelay(5);
     }
     if (pc.iceConnectionState === 'connected') {
@@ -371,16 +565,62 @@ function createPeerConnection(servers) {
     }
   };
 
-  pc.ontrack = e => {
-    if (e.streams && e.streams[0]) {
-      if (myRole === 'receiver') {
-        remoteVideo.srcObject = e.streams[0];
-        safePlay(remoteVideo);
-        setInfoMsg("Receiving video/audio");
-      }
-    }
+  remoteVideo.onplaying = () => {
+    // Reveal the meter as soon as video frames are moving
+    meterContainer.style.display = "block";
+    setInfoMsg("[UI] Stream active - Audio meter visible");
   };
 
+  pc.ontrack = e => {
+    if (!e.track) return;
+    setInfoMsg(`[DEBUG] Incoming track: ${e.track.kind}`);
+ 
+    if (e.track.kind === "video") {
+      if (!remoteVideo.srcObject) {
+        remoteVideo.srcObject = new MediaStream();
+      }
+      remoteVideo.srcObject.addTrack(e.track);
+ //     safePlay(remoteVideo);
+	  // Explicitly call play to ensure the 'onplaying' event fires
+        remoteVideo.play()
+            .then(() => {
+                setInfoMsg("Video started - showing meter");
+                document.getElementById("audioMeterContainer").style.display = "block";
+            })
+            .catch(err => {
+                console.warn("Autoplay blocked, waiting for user interaction:", err);
+                setInfoMsg("Click anywhere to start video");
+            });
+      setInfoMsg("Receiving VIDEO");
+    }
+
+    if (e.track.kind === "audio") {
+        const audioEl = document.getElementById("remoteAudio");
+        audioEl.srcObject = e.streams[0];
+        
+        // Apply the current mute/unmute toggle state immediately
+        applyReceiverAudio(); 
+        
+        if (typeof attachAudioAnalyzer === "function") {
+            attachAudioAnalyzer(e.streams[0]);
+        }
+
+       // Autoplay Fix: Browser blockieren Audio oft
+       audioEl.play().catch(err => {
+         console.warn("Audio autoplay blocked:", err);
+         setInfoMsg("AUDIO BLOCKED - Click anywhere to unmute");
+         
+         // Einmaliger Click-Handler, um Audio zu aktivieren
+         const unlockAudio = () => {
+           audioEl.play();
+           setInfoMsg("Audio unmuted by user");
+           window.removeEventListener('click', unlockAudio);
+         };
+         window.addEventListener('click', unlockAudio);
+       });
+    }
+    setInfoMsg("Receiving AUDIO");
+  }
   return pc;
 }
 
@@ -401,7 +641,7 @@ function connectWebSocket() {
   ws.onclose = () => {
     console.warn("[DEBUG] WebSocket closed – try reconnect ...");
 	setInfoMsg("websocket try reconnect");
-    setAppState(ConnectionState.ERROR);
+    setAppState(ConnectionState.NOTCONNECTED);
     setTimeout(() => {
       connectWebSocket();
       if (myRole) {
@@ -414,9 +654,10 @@ function connectWebSocket() {
 }
 
 connectWebSocket();
-audioSetting = false;
-setAudioTracks(false);
-audioBtn.textContent = "audio off";
+
+audioSetting = true;
+setAudioTracks(audioSetting);
+
 
 function blackoutScreen() {
   blackOut = !blackOut;
@@ -424,17 +665,22 @@ function blackoutScreen() {
   document.getElementById('blackoutBtn').textContent = blackOut ? 'display' : 'blackout';
 }
 
-audioBtn.addEventListener("click", () => {
-  audioSetting = !audioSetting;
-  setAudioTracks(audioSetting);
-  audioBtn.textContent = audioSetting ? "audio on" : "audio off";
-});
 
-function setAudioTracks(enable) {
+function setAudioTracks(state) {
+  audioSetting = state; // Globalen Status setzen
+  const btn = document.getElementById('audioBtn');
+  
+  if (btn) {
+    btn.textContent = audioSetting ? "audio on" : "audio off";
+    btn.style.backgroundColor = audioSetting ? "#45a049" : "#808080";
+  }
+
   if (localStream) {
     localStream.getAudioTracks().forEach(track => {
-      track.enabled = enable;
+      track.enabled = audioSetting;
+      console.log(`[AUDIO] Track ${track.label} enabled: ${track.enabled}`);
     });
+    setInfoMsg(`Audio tracks (${localStream.getAudioTracks().length}): ${audioSetting ? 'ON' : 'OFF'}`);
   }
 }
 
@@ -713,7 +959,7 @@ async function startSender() {
     if (!pc) return;
     setInfoMsg("[DEBUG] ICE state:", pc.iceConnectionState);
     if (['disconnected','failed'].includes(pc.iceConnectionState)) {
-      setAppState(ConnectionState.ERROR); 
+      setAppState(ConnectionState.NOTCONNECTED); 
       attemptReconnectWithDelay(5);
     }
     if (['connected'].includes(pc.iceConnectionState)) {
@@ -733,13 +979,12 @@ async function startSender() {
 }
 
 async function startReceiver() {
-  console.log("### startReceiver ENTERED ###");
   setInfoMsg("start receiver");
 
   receiverBtn.classList.add('active');
   const led = receiverBtn.querySelector('.led');
   if (led) led.classList.add('on');
-  
+    
   document.getElementById("remoteVideo").style.display = "block";
   document.getElementById("localVideo").style.display = "none";
   document.getElementById("blackoutArea").style.display = "none";
@@ -757,17 +1002,6 @@ async function startReceiver() {
     clearInterval(readyInterval);
     readyInterval = null;
   }
-  
-  // ? WICHTIG: ontrack MUSS vor transceivers gesetzt werden
-  pc.ontrack = e => {
-    setInfoMsg("[DEBUG] ontrack fired - streams:", e.streams.length);
-    if (e.streams && e.streams[0]) {
-      setInfoMsg("[DEBUG] Setting remote video stream");
-      remoteVideo.srcObject = e.streams[0];
-      safePlay(remoteVideo);
-      setInfoMsg("receiving video/audio");
-    }
-  };
 
   // Dann Transceiver hinzufügen
   setInfoMsg("[DEBUG] Receiver: adding recvonly transceivers");
@@ -805,7 +1039,7 @@ async function startReceiver() {
   pc.oniceconnectionstatechange = () => {
     setInfoMsg("[DEBUG] ICE state:", pc.iceConnectionState);
     if (['disconnected','failed'].includes(pc.iceConnectionState)) {
-      setAppState(ConnectionState.ERROR); 
+      setAppState(ConnectionState.NOTCONNECTED); 
       attemptReconnectWithDelay(5);
     }
     if (['connected'].includes(pc.iceConnectionState)) {
@@ -833,20 +1067,22 @@ async function startReceiver() {
       }));
       setInfoMsg("[SYNC] resend receiverReady");
     }
-  }, 4000);
-
+  }, 1000);
+  
+  // Am Ende von startReceiver() einfügen:
+  const remoteAudio = document.getElementById("remoteAudio");
+  if (remoteAudio) {
+    remoteAudio.muted = isAudioMuted; // Übernimmt den aktuellen Button-Status
+  }
 }
-
-let getUserMediaDone = false;
 
 async function getLocalStreamOnce() {
   if (localStream) return localStream;
   setInfoMsg("getLocalStreamOnce: acquiring media...");
   localStream = await navigator.mediaDevices.getUserMedia({
     video: true,
-    audio: audioSetting
+    audio: true
   });
-  getUserMediaDone = true;
   return localStream;
 }
 
@@ -878,7 +1114,7 @@ async function fillCameraSelect() {
   } catch (err) {
     console.error("fillCameraSelect error:", err);
     alert("Device in use");
-    setAppState(ConnectionState.ERROR);
+    setAppState(ConnectionState.NOTCONNECTED);
     attemptReconnectWithDelay(5);
   }
 }
@@ -898,7 +1134,7 @@ async function startLocalStream() {
   } catch (err) {
     console.error("startLocalStream error:", err);
     alert("Device in use");
-    setAppState(ConnectionState.ERROR);
+    setAppState(ConnectionState.NOTCONNECTED);
     attemptReconnectWithDelay(5);
   }
 }
@@ -924,7 +1160,7 @@ async function startLocalStreamAndOffer() {
 
     const newStream = await navigator.mediaDevices.getUserMedia({
       video: videoConstraints,
-      audio: audioSetting
+      audio: true
     });
 
     const newVideoTrack = newStream.getVideoTracks()[0];
@@ -975,16 +1211,53 @@ async function startLocalStreamAndOffer() {
     console.error("startLocalStreamAndOffer error:", err);
     alert("Cam/Mic access not granted or available");
   }
+  
+  // Apply current audio button state to new stream
+  if (localStream) {
+    localStream.getAudioTracks().forEach(t => {
+      t.enabled = audioSetting;
+    });
+  }
 }
 
-function disableAudio() {
-  setInfoMsg("disableAudio");
-  audioSetting = false;
-  if (localStream) { 
-    localStream.getAudioTracks().forEach(t => t.enabled = false); 
-  }
-  document.getElementById('audioBtn').textContent = 'audio on';
+
+
+function applyAudioStatus() {
+    const audioBtn = document.getElementById("audioBtn");
+    const remoteAudio = document.getElementById("remoteAudio");
+    const remoteVideo = document.getElementById("remoteVideo");
+    const bar = document.getElementById('audioMeterBar');
+
+    // 1. UI aktualisieren
+    if (isAudioMuted) {
+        audioBtn.textContent = "audio off";
+        audioBtn.style.setProperty("background-color", "#808080", "important");
+        if (bar) bar.style.backgroundColor = "#ff4444";
+    } else {
+        audioBtn.textContent = "audio on";
+        audioBtn.style.setProperty("background-color", "#45a049", "important");
+        if (bar) bar.style.backgroundColor = "#00FF00";
+    }
+
+    // 2. Aktion: BEIDE Elemente (Video & Audio) stummschalten
+    // Manchmal kommt der Ton über das Video-Element mit!
+    [remoteAudio, remoteVideo].forEach(el => {
+        if (el) {
+            el.muted = isAudioMuted;
+            // Falls unmuted, sicherheitshalber play() aufrufen
+            if (!isAudioMuted) el.play().catch(() => {});
+        }
+    });
+
+    setInfoMsg("Audio is now: " + (isAudioMuted ? "OFF" : "ON"));
 }
+
+
+function toggleAudio() {
+    isAudioMuted = !isAudioMuted;
+    applyAudioStatus();
+}
+
 
 // ? OPTIMIERT: Memory Leak Fix - alle Ressourcen sauber freigeben
 function stopAll() {
@@ -999,6 +1272,11 @@ function stopAll() {
   const remoteVideoEl = document.getElementById('remoteVideo');
   const infoField = document.getElementById("infoMode");
   infoField.value = "";
+ 
+ // Audio-Balken zurücksetzen
+  const bar = document.getElementById('audioMeterBar');
+  if (bar) bar.style.width = "0%";
+  setInfoMsg("Stopped and Meter reset");
  
   if (readyInterval) {
     clearInterval(readyInterval);
@@ -1078,6 +1356,52 @@ function attemptReconnectWithDelay(seconds) {
   }, seconds * 1000);
 }
 
+
+function attachAudioAnalyzer(stream) {
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioContext.createMediaStreamSource(stream);
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    const bar = document.getElementById('audioMeterBar');
+    if (bar) {
+      // Setzt die Farbe sofort beim Start des Empfangs passend zum Button-Status
+      bar.style.backgroundColor = isAudioMuted ? "#ff4444" : "#00FF00";
+    }
+    function updateMeter() {
+      // Prüfen, ob der Stream oder Tracks gestoppt wurden
+      const isStreamActive = stream.active && stream.getAudioTracks().some(t => t.readyState === 'live');
+      
+      if (!bar) return;
+
+      if (!isStreamActive) {
+        bar.style.width = "0%";
+        // Beende die Animation, wenn der Stream tot ist
+        if (audioContext.state !== 'closed') audioContext.close();
+        return; 
+      }
+
+      analyser.getByteFrequencyData(dataArray);
+      let sum = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        sum += dataArray[i];
+      }
+      let average = sum / bufferLength;
+      
+      // Balken aktualisieren (Sensibilität: average * 2)
+      bar.style.width = Math.min(100, (average * 2.5)) + "%";
+      requestAnimationFrame(updateMeter);
+    }
+    updateMeter();
+  } catch (e) {
+    console.warn("Audio Analyzer Error:", e);
+  }
+  document.getElementById("audioBtn").onclick = toggleAudio;
+}
 </script>
 </body>
 </html>

@@ -204,7 +204,18 @@ button.active {
   #localVideo { width: 70%; max-width: 100%; }
   #blackoutBtn { background-color: grey; opacity: 1; z-index: 99999; }
   #audioBtn { background-color: grey; opacity: 1; z-index: 99998; }
-  #blackoutArea { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: black; opacity: 1; z-index: 99998; }
+#blackoutArea {
+    display: none;
+    position: fixed; /* Fixes it to the screen even if scrolling */
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: black;
+    z-index: 999999; /* Higher than everything else */
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent; /* Removes the gray flash on tap */
+}
   #controls { margin-bottom: 15px; }
 
   #toggleSizeBtn {
@@ -661,50 +672,57 @@ setAudioTracks(audioSetting);
 async function blackoutScreen() {
     const blackoutArea = document.getElementById('blackoutArea');
     const btn = document.getElementById('blackoutBtn');
-    
-    // 1. If not currently fullscreen, enter it
-    if (!document.fullscreenElement) {
+
+    // If currently off, turn it on
+    if (blackoutArea.style.display === 'none' || blackoutArea.style.display === '') {
+        
+        // Try real fullscreen (Works on PC and Android)
         try {
             if (document.documentElement.requestFullscreen) {
                 await document.documentElement.requestFullscreen();
-            } else if (document.documentElement.webkitRequestFullscreen) { // Safari/iOS
+            } else if (document.documentElement.webkitRequestFullscreen) {
+                // This might work on iPads and some Safari versions
                 await document.documentElement.webkitRequestFullscreen();
             }
-            
-            blackoutArea.style.display = 'block';
-            btn.textContent = 'display';
-            setInfoMsg("Blackout active (Click screen or press ESC to exit)");
-
         } catch (err) {
-            console.warn("Fullscreen blocked or failed:", err);
-            // Fallback: Just black out the browser window
-            blackoutArea.style.display = 'block';
+            console.log("Native fullscreen blocked, using cover mode.");
         }
+
+        // Apply visual blackout (Works on ALL devices including iPhone)
+        blackoutArea.style.display = 'block';
+        btn.textContent = 'display';
+        setInfoMsg("Blackout active - Tap screen to exit");
+        
     } else {
-        // 2. If already fullscreen, exit it
+        // Turn it off
         exitBlackout();
     }
 }
 
-// Separate function to clean up states
 function exitBlackout() {
-    if (document.fullscreenElement) {
+    const blackoutArea = document.getElementById('blackoutArea');
+    const btn = document.getElementById('blackoutBtn');
+
+    // Exit real fullscreen if active
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
         if (document.exitFullscreen) document.exitFullscreen();
         else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
     }
-    document.getElementById('blackoutArea').style.display = 'none';
-    document.getElementById('blackoutBtn').textContent = 'blackout';
+
+    blackoutArea.style.display = 'none';
+    btn.textContent = 'blackout';
 }
 
-// PC: Listen for the "Esc" key to reset the button text
-document.addEventListener('fullscreenchange', () => {
-    if (!document.fullscreenElement) {
-        exitBlackout();
-    }
-});
+// Ensure tapping the black screen always exits
+document.getElementById('blackoutArea').onclick = exitBlackout;
 
-// PC & Handy: Click/Tap the black screen to exit
-document.getElementById('blackoutArea').addEventListener('click', exitBlackout);
+// Handle the "Esc" key on PC
+document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement) exitBlackout();
+});
+document.addEventListener('webkitfullscreenchange', () => {
+    if (!document.webkitFullscreenElement) exitBlackout();
+});
 
 function setAudioTracks(state) {
   audioSetting = state; // Globalen Status setzen

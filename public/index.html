@@ -52,36 +52,34 @@
   button .led { display: inline-block; width: 10px; height: 10px; min-width: 10px; border-radius: 50%; background-color: #555; margin-right: 6px; }
   button .led.on { background-color: red; box-shadow: 0 0 6px red; }
 
-  /* VIDEO CONTAINMENT & WIDE MODE */
-  .video-container {
-    position: relative;
-    width: 100%;
-    margin: 10px 0;
-    display: flex;
-    justify-content: center; /* Zentriert Video horizontal */
-  }
+  /* Standard Video-Stil (Normal) */
+.video-container {
+  position: relative;
+  width: 100%;
+  display: flex;
+  justify-content: flex-start; /* Linksbündig im Normalzustand */
+  margin: 10px 0;
+}
 
-  video {
-    display: block;
-    width: 70%; /* Normalmodus */
-    max-width: 100%;
-    height: auto;
-    background: black;
-    border: 3px solid #ccc;
-    border-radius: 8px;
-    position: relative;
-    z-index: 1;
-  }
-
-  /* Wide-Modus: Begrenzt auf Bildschirmgröße */
-  video.fullwidth {
+video {
+  display: block;
+  width: 70%;           /* Deine gewünschte Breite im Normal-Modus */
+  max-width: 100%;
+  height: auto;
+  max-height: 70vh;     /* Begrenzung, damit es nicht zu hoch wird */
+  background: black;
+  border: 3px solid #ccc;
+  border-radius: 8px;
+  object-fit: contain;  /* Behält Proportionen bei */
+}
+  /* Wide-Modus: Maximale Fläche ohne Überlauf */
+  .fullwidth {
     width: 100% !important;
-    max-width: 100vw !important; /* Nie breiter als der Bildschirm */
-    max-height: 85vh !important; /* Nie höher als der Bildschirm (minus Platz für UI) */
-    object-fit: contain;        /* Verhindert Abschneiden des Videos */
-    border-color: #45a049;      /* Optisches Feedback für Wide */
+    max-width: 100vw !important;
+    max-height: 85vh !important; /* Nutzt fast die volle Höhe, lässt Platz für UI */
+    border-color: #45a049;      /* Grüner Rahmen zur Bestätigung */
   }
-
+  
   .status-overlay {
     position: absolute;
     bottom: 10px;

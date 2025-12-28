@@ -5,28 +5,46 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>robocam</title>
 <style>
-  body { font-family: sans-serif; display: flex; flex-direction: column; padding: 20px; background: linear-gradient(to bottom, #f4f4f4, #e0e0e0); min-height: 100vh; margin: 0; box-sizing: border-box; }
+  body { font-family: sans-serif; display: flex; flex-direction: column; padding: 20px; background: linear-gradient(to bottom, #f4f4f4, #e0e0e0); min-height: 100vh; }
   #loginForm, #changeForm { margin-bottom: 20px;}
   
-  .form-row { display: flex; align-items: center; gap: 15px; margin-bottom: 10px; }
-  .form-row input { padding: 6px 10px; height: 33px; border-radius: 8px; border: 1px solid #ccc; font-size: 14px; }
+  .form-row {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 10px;
+}
 
-  #audioMeterContainer {
-    display: none;
-    position: absolute;
-    bottom: 40px;
+.form-row input {
+  padding: 6px 10px;
+  height: 33px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 14px;
+}
+
+#audioMeterContainer {
+    display: none;    /* Hidden by default */
+    position: absolute;   /* Absolute within the relative container */
+    bottom: 40px;         /* Positioned above the status text */
     left: 10px;
-    width: 125px;
+    width: 125px;         /* Smaller width for overlay style */
     height: 6px;
-    background: rgba(51, 51, 51, 0.8);
+    background: rgba(51, 51, 51, 0.8); /* Semi-transparent background */
     z-index: 10;
     overflow: hidden;
     border-radius: 3px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.5);
-    pointer-events: none;
-  }
+    pointer-events: none; /* Allows clicks to pass through to the video */
+}
 
-  #audioMeterBar { width: 0%; height: 100%; background-color: #00FF00; box-shadow: 0 0 8px #00FF00; transition: width 0.1s ease-out; }
+#audioMeterBar {
+    width: 0%;
+    height: 100%;
+    background-color: #00FF00;
+    box-shadow: 0 0 8px #00FF00; /* Subtle glow */
+    transition: width 0.1s ease-out;
+}
 
   #app { display: none; }
   #statusDisplay { margin-top: 10px; font-weight: bold; }
@@ -35,77 +53,232 @@
   .app-icon { width: 40px; height: 40px; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.2); }
   h1 { margin: 10px; font-size: 1.8em; color: #333; }
 
-  /* BUTTONS */
-  button, select, #toggleSizeBtn {
-    box-sizing: border-box; font-size: 14px; height: 36px; min-width: 120px; padding: 0 16px;
-    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-    border: none; border-radius: 10px; background-color: #808080; color: white; cursor: pointer;
-    line-height: 1; white-space: nowrap; transition: background-color 0.3s, transform 0.1s;
+/* ==============================
+   BUTTON NORMALIZATION (FIXED)
+   ============================== */
+
+button,
+select,
+#toggleSizeBtn {
+  box-sizing: border-box;
+  font-size: 14px;
+  height: 36px;
+  min-width: 120px;
+  padding: 0 16px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+
+  border: none;
+  border-radius: 10px;
+  background-color: #808080;
+  color: white;
+  cursor: pointer;
+
+  line-height: 1;
+  white-space: nowrap;
+  transition: background-color 0.3s, transform 0.1s;
+}
+
+/* Hover / disabled */
+button:hover:enabled {
+  background-color: #45a049;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* Active / special buttons */
+button.active {
+  background-color: #00FF00;
+  transform: scale(1.05);
+}
+
+#stopBtn {
+  background-color: #FF0000;
+}
+
+#stopBtn:hover:enabled {
+  background-color: #d32f2f;
+}
+
+/* ==============================
+   BUTTON NORMALIZATION
+   ============================== */
+
+button,
+select,
+#toggleSizeBtn {
+  box-sizing: border-box;
+  font-size: 14px;
+  height: 36px;
+  min-width: 120px;
+  padding: 0 14px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  border: none;
+  border-radius: 10px;
+  background-color: #808080;
+  color: white;
+  cursor: pointer;
+
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* ==============================
+   LED INDICATOR (FIXED)
+   ============================== */
+
+button .led {
+  display: inline-block;       /* <-- REQUIRED */
+  width: 10px;
+  height: 10px;
+  min-width: 10px;             /* <-- prevents flex collapse */
+  min-height: 10px;
+
+  border-radius: 50%;
+  background-color: #555;      /* visible against gray */
+  box-shadow: 0 0 2px black;
+
+  margin-right: 6px;           /* spacing from text */
+}
+
+button .led.on {
+  background-color: red;
+  box-shadow: 0 0 6px red;
+}
+
+/* ==============================
+   STATES
+   ============================== */
+
+button:hover:enabled {
+  background-color: #45a049;
+}
+
+button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+button.active {
+  background-color: #00ff00;
+  transform: scale(1.05);
+}
+
+#stopBtn {
+  background-color: #ff0000;
+}
+
+#stopBtn:hover:enabled {
+  background-color: #d32f2f;
+}
+/* ==============================
+   RESPONSIVE SAFETY
+   ============================== */
+
+@media (max-width: 480px) {
+  button,
+  select,
+  #toggleSizeBtn {
+    min-width: 100px;
+    font-size: 13px;
   }
+}
 
   button:hover:enabled { background-color: #45a049; }
-  button:disabled { cursor: not-allowed; opacity: 0.7; }
+  button:disabled { cursor: not-allowed; opacity: 0.8; }
   button.active { background-color: #00FF00; transform: scale(1.05); }
   #stopBtn { background-color: #FF0000; }
   #stopBtn:hover:enabled { background-color: #d32f2f; }
+  #remoteVideo { width: 70%; max-width: 100%; }
+  #localVideo { width: 70%; max-width: 100%; }
+  #blackoutBtn { background-color: grey; opacity: 1; z-index: 99999; }
+  #audioBtn { background-color: grey; opacity: 1; z-index: 99998; }
+#blackoutArea {
+  display: none;
+  position: fixed;
+  /* Use 0 for all edges to force coverage */
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* Special iOS constants to handle the notch/home bar */
+  width: 100vw;
+  height: 100vh;
+  background-color: #000000 !important;
+  /* Highest possible z-index */
+  z-index: 9999999 !important; 
+  /* Prevents the iPhone from scrolling or bouncing under the black */
+  touch-action: none;
+}
+  #controls { margin-bottom: 15px; }
 
-  button .led { display: inline-block; width: 10px; height: 10px; min-width: 10px; border-radius: 50%; background-color: #555; margin-right: 6px; }
-  button .led.on { background-color: red; box-shadow: 0 0 6px red; }
+  #toggleSizeBtn {
+    padding: 10px 20px;
+    background: #0077cc;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+  }
 
-  /* Standard Video-Stil (Normal) */
+  #toggleSizeBtn:hover {
+    background: #005fa3;
+  }
+
 .video-container {
   position: relative;
   width: 100%;
-  display: flex;
-  justify-content: flex-start; /* Linksbündig im Normalzustand */
+  max-width: 100%;
   margin: 10px 0;
+  display: inline-block;
 }
 
 video {
   display: block;
-  width: 70%;           /* Deine gewünschte Breite im Normal-Modus */
-  max-width: 100%;
+  width: 100%;
   height: auto;
-  max-height: 70vh;     /* Begrenzung, damit es nicht zu hoch wird */
   background: black;
   border: 3px solid #ccc;
   border-radius: 8px;
-  object-fit: contain;  /* Behält Proportionen bei */
+  position: relative;
+  z-index: 1;
 }
-  /* Wide-Modus: Maximale Fläche ohne Überlauf */
-  .fullwidth {
-    width: 100% !important;
-    max-width: 100vw !important;
-    max-height: 85vh !important; /* Nutzt fast die volle Höhe, lässt Platz für UI */
-    border-color: #45a049;      /* Grüner Rahmen zur Bestätigung */
-  }
-  
-  .status-overlay {
-    position: absolute;
-    bottom: 10px;
-    left: 10px;
-    background: rgba(0,0,0,0.6);
-    color: #fff;
-    padding: 4px 8px;
-    border-radius: 6px;
-    font-size: 14px;
-    z-index: 2;
-    pointer-events: none;
-  }
 
-  #blackoutArea {
-    display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    width: 100vw; height: 100vh; background-color: #000000 !important;
-    z-index: 9999999 !important; touch-action: none;
-  }
+.status-overlay {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.fullwidth {
+  max-width: 100% !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain;
+}
 
   .inline-container img { vertical-align: middle; height: 40px; }
   .inline-container span { vertical-align: middle; margin-left: 10px; font-size: 30px; }
 
-  @media (max-width: 480px) {
-    button, select, #toggleSizeBtn { min-width: 100px; font-size: 13px; }
-    video { width: 100%; } /* Auf kleinen Handys standardmäßig breit */
-  }
 </style>
 
 </head>
@@ -132,7 +305,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v95
+   <span>robocam</span>v97
    <input type="text" id="infoMsg" style="margin-left: 10px;">
    <input type="text" id="infoMode" style="margin-left: 10px;">
   </div>
@@ -374,9 +547,7 @@ const iceServers = [
 // ? OPTIMIERT: ICE-Kandidaten-Queue abarbeiten
 async function processIceCandidateQueue() {
   if (!pc || !pc.remoteDescription) return;
-  
-  setInfoMsg(`[DEBUG] Processing ${iceCandidateQueue.length} queued ICE candidates`);
-  
+    
   while (iceCandidateQueue.length > 0) {
     const candidate = iceCandidateQueue.shift();
     try {

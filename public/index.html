@@ -305,7 +305,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v98
+   <span>robocam</span>v97
    <input type="text" id="infoMsg" style="margin-left: 10px;">
    <input type="text" id="infoMode" style="margin-left: 10px;">
   </div>
@@ -739,87 +739,8 @@ function setAudioTracks(state) {
   }
 }
 
-async function handleMessage(msg) {
-  try {
-    let text = (msg.data instanceof Blob) ? await msg.data.text() : msg.data;
-    let data = JSON.parse(text);
-
-    // --- Synchronisation & Status ---
-    if (data.type === "receiverGone") { receiverReady = false; return; }
-    if (data.type === "receiverReady") {
-      receiverReady = true;
-      if (pendingSenderStart && myRole === 'sender') {
-        pendingSenderStart = false;
-        startSender();
-      }
-      return;
-    }
-    if (data.type === "senderStatus") {
-        window.senderActive = data.active;
-        const senderBtn = document.getElementById("senderBtn");
-        if (data.active) {
-            senderBtn.disabled = true;
-            senderBtn.textContent = "sender (locked)";
-        } else {
-            senderBtn.disabled = false;
-            senderBtn.textContent = "send";
-        }
-        return;
-    }
-
-    if (!pc) return;
-
-    // --- SDP Handling (Offer/Answer/Collision) ---
-    if (data.sdp) {
-      const description = new RTCSessionDescription(data.sdp);
-      const isOffer = description.type === "offer";
-      
-      // Kollisions-Check
-      const offerCollision = isOffer && (makingOffer || pc.signalingState !== "stable");
-
-      if (offerCollision) {
-        if (!polite) {
-          setInfoMsg("[DEBUG] Offer collision – ignored (impolite)");
-          return; 
-        }
-        // Höflicher Peer: Rollback und dann das fremde Offer verarbeiten
-        setInfoMsg("[DEBUG] Offer collision – rolling back");
-        await pc.setLocalDescription({ type: "rollback" });
-        await pc.setRemoteDescription(description);
-      } else {
-        await pc.setRemoteDescription(description);
-      }
-
-      if (isOffer) {
-        // Erst nach RemoteDescription die gepufferten ICE-Kandidaten laden
-        await processIceCandidateQueue();
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        ws.send(JSON.stringify({ sdp: pc.localDescription }));
-      } else {
-        await processIceCandidateQueue();
-      }
-    } 
-
-    // --- ICE Candidate Handling ---
-    else if (data.candidate) {
-      if (!pc.remoteDescription) {
-        iceCandidateQueue.push(data.candidate); // Puffer für STUN/TURN
-      } else {
-        try {
-          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-        } catch (e) {
-          console.error("ICE Error:", e);
-        }
-      }
-    }
-  } catch (err) {
-    console.error("handleMessage error:", err);
-  }
-}
-
 // ? VERBESSERT: Robustere Message-Behandlung mit ICE-Queue
-async function handleMessageOLD(msg) {
+async function handleMessage(msg) {
   try {
     let text;
     if (msg.data instanceof Blob) {
@@ -1118,7 +1039,6 @@ async function startReceiver() {
   receiverBtn.classList.add('active');
   const led = receiverBtn.querySelector('.led');
   if (led) led.classList.add('on');
-  iceCandidateQueue = [];
     
   document.getElementById("remoteVideo").style.display = "block";
   document.getElementById("localVideo").style.display = "none";

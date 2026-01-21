@@ -558,78 +558,34 @@ async function processIceCandidateQueue() {
   }
 }
 
-function createPeerConnection(configFromServer) {
-    console.log("DEBUG: Rohdaten vom Server erhalten:", configFromServer);
+function createPeerConnection(servers) {
+  pc = new RTCPeerConnection({ iceServers: servers });
 
-    let servers = [];
-
-    // Fall 1: Xirsys liefert { "v": { "iceServers": [...] } }
-    if (configFromServer && configFromServer.v && Array.isArray(configFromServer.v.iceServers)) {
-        servers = configFromServer.v.iceServers;
-    } 
-    // Fall 2: Xirsys/Server liefert { "iceServers": [...] }
-    else if (configFromServer && Array.isArray(configFromServer.iceServers)) {
-        servers = configFromServer.iceServers;
-    }
-    // Fall 3: Es wurde direkt das Array [...] übergeben
-    else if (Array.isArray(configFromServer)) {
-        servers = configFromServer;
-    }
-
-    // WICHTIG: Validierung der einzelnen Server-Einträge
-    // Manche APIs senden leere Einträge oder Metadaten mit, die wir filtern müssen
-    const cleanedServers = servers.filter(s => s && s.urls);
-
-    if (cleanedServers.length === 0) {
-        console.warn("WARNUNG: Keine gültigen ICE-Server gefunden. Nutze Google STUN Fallback.");
-        cleanedServers.push({ urls: "stun:stun.l.google.com:19302" });
-    }
-
-    const finalConfig = {
-        iceServers: cleanedServers,
-        iceTransportPolicy: "all",
-        bundlePolicy: "balanced",
-        rtcpMuxPolicy: "require"
-    };
-
-    console.log("DEBUG: Finale bereinigte PC-Konfiguration:", finalConfig);
-
-    try {
-        newPc = new RTCPeerConnection(finalConfig);
-    } catch (e) {
-        console.error("Fehler beim Erstellen der RTCPeerConnection:", e);
-        throw e;
-    }
-
-    // ICE Candidate Behandlung
-    newPc.onicecandidate = (event) => {
-        if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ 
-                candidate: event.candidate, 
-                roomId: ROOM_ID 
-            }));
-        }
-    };
-  
-  newPc.oniceconnectionstatechange = () => {
-    if (!newPc) return;
-    setInfoMsg("[DEBUG] ICE state: " + newPc.iceConnectionState);
-    if (['disconnected','failed'].includes(newPc.iceConnectionState)) {
+  pc.oniceconnectionstatechange = () => {
+    if (!pc) return;
+    setInfoMsg("[DEBUG] ICE state: " + pc.iceConnectionState);
+    if (['disconnected','failed'].includes(pc.iceConnectionState)) {
       setAppState(ConnectionState.NOTCONNECTED);
       attemptReconnectWithDelay(5);
     }
-    if (newPc.iceConnectionState === 'connected') {
+    if (pc.iceConnectionState === 'connected') {
       setAppState(ConnectionState.CONNECTED);
     }
   };
-  
+
+  pc.onicecandidate = e => {
+    if (e.candidate && ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ candidate: e.candidate }));
+    }
+  };
+
   remoteVideo.onplaying = () => {
     // Reveal the meter as soon as video frames are moving
     meterContainer.style.display = "block";
     setInfoMsg("[UI] Stream active - Audio meter visible");
   };
 
-  newPc.ontrack = e => {
+  pc.ontrack = e => {
     if (!e.track) return;
     setInfoMsg(`[DEBUG] Incoming track: ${e.track.kind}`);
  
@@ -679,7 +635,7 @@ function createPeerConnection(configFromServer) {
     }
     setInfoMsg("Receiving AUDIO");
   }
-  return newPc;
+  return pc;
 }
 
 function connectWebSocket() {
@@ -925,16 +881,6 @@ function safePlay(videoEl) {
 }
 
 async function start(role) {
-  // This forces a permission request
-  navigator.mediaDevices.getUserMedia({ audio: true })
-  .then(stream => console.log("Access Granted!"))
-  .catch(err => console.error("Access still denied:", err));
-
-  navigator.mediaDevices.enumerateDevices().then(devices => {
-    const summary = devices.map(d => `${d.kind}: ${d.label || '[[HIDDEN/BLOCKED]]'}`);
-    console.log("Detected Devices:", summary);
-  });
-  
   document.getElementById("loginForm").style.display = "none";
   document.getElementById("changeForm").style.display = "none";
 
@@ -1014,28 +960,6 @@ function determineConnectionType() {
   });
 }
 
-// Funktion zum Abrufen der aktuellen TURN-Daten vom eigenen Server
-async function getIceServers() {
-    try {
-        const response = await fetch('/get-turn-credentials'); // Dein API-Endpunkt
-        if (!response.ok) throw new Error("Fehler beim Laden der ICE-Server");
-        
-        const turnData = await response.json();
-        return [
-            { urls: "stun:fr-turn3.xirsys.com" },
-            {
-                urls: turnData.urls,
-                username: turnData.username,
-                credential: turnData.credential
-            }
-        ];
-    } catch (err) {
-        console.error("ICE Fetch Error:", err);
-        // Fallback auf Standard-STUN, falls TURN fehlschlägt
-        return [{ urls: "stun:stun.l.google.com:19302" }];
-    }
-}
-
 async function startSender() {
   setInfoMsg("start sender");
   ws.send(JSON.stringify({ type: "senderStatus", active: true, roomId: ROOM_ID }));
@@ -1049,8 +973,7 @@ async function startSender() {
   stopBtn.style.display = 'block';
   setAppState(ConnectionState.WAITING);
 
-  const dynamicIceServers = await getIceServers(); // Daten erst jetzt laden
-  pc = createPeerConnection(dynamicIceServers); 
+  pc = createPeerConnection(iceServers); 
   determineConnectionType();
 
   pc.onnegotiationneeded = async () => {
@@ -1126,8 +1049,7 @@ async function startReceiver() {
   stopBtn.style.display = 'block';
   setAppState(ConnectionState.WAITING);
 
-  const dynamicIceServers = await getIceServers(); // Daten erst jetzt laden
-  pc = createPeerConnection(dynamicIceServers); 
+  pc = createPeerConnection(iceServers); 
   determineConnectionType();
 
   // ensure no old interval is running
@@ -1261,12 +1183,8 @@ async function startLocalStream() {
     const videoDevices = devices.filter(d => d.kind === "videoinput");
     const select = document.getElementById("cameraSelect");
 
-    if (videoDevices.length === 0) {
-        console.error("No video devices found.");
-        setInfoMsg("No camera detected");
-        return; // Exit early
-    } else { select.style.display = "block"; }
-	
+    if (videoDevices.length > 0) select.style.display = "block";
+
     await startLocalStreamAndOffer();
   } catch (err) {
     console.error("startLocalStream error:", err);
@@ -1284,20 +1202,18 @@ async function startLocalStreamAndOffer() {
     setInfoMsg("startLocalStreamAndOffer");
 
     const select = document.getElementById('cameraSelect');
-    const videoConstraints = select.value ? { deviceId: { ideal: select.value } } : true;
-    //const videoConstraints = select.value ? { deviceId: { exact: select.value } } : true;
+    const videoConstraints = select.value ? { deviceId: { exact: select.value } } : true;
 
     // Prüfen ob bereits die gleiche Kamera aktiv ist
     if (localStream && localStream.active) {
       const currentVideoTrack = localStream.getVideoTracks()[0];
       if (currentVideoTrack && currentVideoTrack.getSettings().deviceId === select.value) {
-        console.log("Same camera already active");
-        return;
+        setInfoMsg("Same camera already active");
+//        return;
       }
     }
 
-    console.log("Requesting Media with constraints:", { video: videoConstraints, audio: true });
-	const newStream = await navigator.mediaDevices.getUserMedia({
+    const newStream = await navigator.mediaDevices.getUserMedia({
       video: videoConstraints,
       audio: true
     });

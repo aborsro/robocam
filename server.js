@@ -1,4 +1,5 @@
 const express = require('express');
+const https = require('https');
 const http = require('http');
 const WebSocket = require('ws');
 const bodyParser = require('body-parser');
@@ -13,6 +14,43 @@ const MASTER = "zork";   // nur hier sichtbar!
 // --- User-Passwort persistent speichern ---
 let userPassword = "rr"; // Fallback
 const pwFile = "password.json";
+
+// Deine Xirsys-Daten (DIESE BLEIBEN NUR AUF DEM SERVER)
+const xirsysIdent = "aborsro"; 
+const xirsysSecret = "e2d37f0c-800f-11f0-98d4-0242ac150002";
+const xirsysChannel = "robocam"; // Dein Room/Channel
+
+app.get('/get-turn-credentials', (req, res) => {
+    // Wir fragen Xirsys nach temporären ICE-Servern
+    const options = {
+        host: 'global.xirsys.net',
+        path: `/_premium/ice?channel=${xirsysChannel}`,
+        method: 'PUT',
+        headers: {
+            "Authorization": "Basic " + Buffer.from(`${xirsysIdent}:${xirsysSecret}`).toString("base64")
+        }
+    };
+
+    const xReq = https.request(options, (xRes) => {
+        let data = '';
+        xRes.on('data', (chunk) => data += chunk);
+        xRes.on('end', () => {
+            try {
+                const responseParsed = JSON.parse(data);
+                // Wir senden nur das 'v'-Objekt (enthält iceServers) an den Client
+                res.json(responseParsed.v); 
+            } catch (e) {
+                res.status(500).send("Fehler beim Parsen der Xirsys-Antwort");
+            }
+        });
+    });
+
+    xReq.on('error', (e) => {
+        res.status(500).send("Xirsys API Fehler: " + e.message);
+    });
+
+    xReq.end();
+});
 
 // Passwort aus Datei laden (falls vorhanden)
 try {

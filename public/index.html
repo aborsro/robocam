@@ -622,24 +622,30 @@ function createPeerConnection(servers) {
     if (!e.track) return;
     setInfoMsg(`[DEBUG] Incoming track: ${e.track.kind}`);
  
-    if (e.track.kind === "video") {
-      if (!remoteVideo.srcObject) {
-        remoteVideo.srcObject = new MediaStream();
+if (e.track.kind === "video") {
+  if (!remoteVideo.srcObject) {
+    remoteVideo.srcObject = new MediaStream();
+  }
+  
+  // Track hinzufügen
+  remoteVideo.srcObject.addTrack(e.track);
+  
+  // Nur ein einziger, sauberer Play-Aufruf:
+  remoteVideo.play()
+    .then(() => {
+      setInfoMsg("Video started - showing meter");
+      document.getElementById("audioMeterContainer").style.display = "block";
+    })
+    .catch(err => {
+      // AbortError ignorieren, da er nur bedeutet, dass ein neuerer Request Vorrang hat
+      if (err.name !== "AbortError") {
+        console.warn("Autoplay blocked:", err);
+        setInfoMsg("Click anywhere to start video");
       }
-      remoteVideo.srcObject.addTrack(e.track);
-      safePlay(remoteVideo);
-	  // Explicitly call play to ensure the 'onplaying' event fires
-        remoteVideo.play()
-            .then(() => {
-                setInfoMsg("Video started - showing meter");
-                document.getElementById("audioMeterContainer").style.display = "block";
-            })
-            .catch(err => {
-                console.warn("Autoplay blocked, waiting for user interaction:", err);
-                setInfoMsg("Click anywhere to start video");
-            });
-      setInfoMsg("Receiving VIDEO");
-    }
+    });
+    
+  setInfoMsg("Receiving VIDEO");
+}
 
     if (e.track.kind === "audio") {
         const audioEl = document.getElementById("remoteAudio");

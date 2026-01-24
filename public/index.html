@@ -269,48 +269,15 @@ video {
   pointer-events: none;
 }
 
-/* Bestehende Klasse aktualisieren */
 .fullwidth {
-  position: fixed !important; /* Löst das Video aus dem normalen Layout */
-  top: 0;
-  left: 0;
-  width: 100vw !important;
-  height: 100vh !important;
-  max-width: none !important;
-  object-fit: cover; /* WICHTIG: Füllt die Höhe aus, ohne zu zerren */
-  z-index: 9999;
-  border: none !important;
-  border-radius: 0 !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain;
 }
 
-/* Verhindert Scrollen, wenn das Video den ganzen Bildschirm füllt */
-body:has(.fullwidth) {
-  overflow: hidden;
-  padding: 0;
-}
-
-/* Damit der Button über dem Video sichtbar bleibt */
-#controls {
-  position: relative;
-  z-index: 10000;
-}
-
-.inline-container {
-  display: flex;       /* Nutze Flexbox für bessere Kontrolle */
-  align-items: center; /* Zentriert Icon und Text vertikal perfekt */
-  margin-bottom: 10px;
-}
-
-.inline-container img { 
-  height: 40px; 
-  width: auto;         /* Verhindert Verzerrungen */
-}
-
-.inline-container span { 
-  margin-left: 10px; 
-  font-size: 30px; 
-  font-weight: bold;   /* Optional: Damit es markanter aussieht */
-}
+  .inline-container img { vertical-align: middle; height: 40px; }
+  .inline-container span { vertical-align: middle; margin-left: 10px; font-size: 30px; }
 
 </style>
 
@@ -338,7 +305,7 @@ body:has(.fullwidth) {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>x01
+   <span>robocam</span>v97
    <input type="text" id="infoMsg" style="margin-left: 10px;">
    <input type="text" id="infoMode" style="margin-left: 10px;">
   </div>
@@ -626,24 +593,18 @@ function createPeerConnection(servers) {
       if (!remoteVideo.srcObject) {
         remoteVideo.srcObject = new MediaStream();
       }
-      
-      // Track hinzufügen
       remoteVideo.srcObject.addTrack(e.track);
-      
-      // Nur ein einziger, sauberer Play-Aufruf:
-      remoteVideo.play()
-        .then(() => {
-          setInfoMsg("Video started - showing meter");
-          document.getElementById("audioMeterContainer").style.display = "block";
-        })
-        .catch(err => {
-          // AbortError ignorieren, da er nur bedeutet, dass ein neuerer Request Vorrang hat
-          if (err.name !== "AbortError") {
-            console.warn("Autoplay blocked:", err);
-            setInfoMsg("Click anywhere to start video");
-          }
-        });
-        
+ //     safePlay(remoteVideo);
+	  // Explicitly call play to ensure the 'onplaying' event fires
+        remoteVideo.play()
+            .then(() => {
+                setInfoMsg("Video started - showing meter");
+                document.getElementById("audioMeterContainer").style.display = "block";
+            })
+            .catch(err => {
+                console.warn("Autoplay blocked, waiting for user interaction:", err);
+                setInfoMsg("Click anywhere to start video");
+            });
       setInfoMsg("Receiving VIDEO");
     }
 
@@ -1146,23 +1107,6 @@ async function startReceiver() {
   };
   console.log("### startReceiver END reached ###");
 
-  // --- NEU: Sicherheitsebene für Video-Erzwingung ---
-  if (remoteVideo) {
-    // Falls der Browser Autoplay blockiert, hilft oft ein Klick des Nutzers
-    const forcePlay = () => {
-      if (remoteVideo.paused && remoteVideo.srcObject) {
-        remoteVideo.play()
-          .then(() => {
-            setInfoMsg("Video erzwungen durch Interaktion");
-            window.removeEventListener('click', forcePlay);
-          })
-          .catch(e => console.log("Play-Versuch fehlgeschlagen:", e));
-      }
-    };
-    window.addEventListener('click', forcePlay);
-  } 
-
-  
   setInfoMsg("[SYNC] sending receiverReady");
   ws.send(JSON.stringify({
     type: "receiverReady",
@@ -1190,15 +1134,10 @@ async function startReceiver() {
 async function getLocalStreamOnce() {
   if (localStream) return localStream;
   setInfoMsg("getLocalStreamOnce: acquiring media...");
-  
-  try {
-    // Attempt both first
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-  } catch (err) {
-    console.warn("Full AV access failed, trying video only...", err);
-    // Fallback to video only if a microphone is missing
-    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-  }
+  localStream = await navigator.mediaDevices.getUserMedia({
+    video: true,
+    audio: true
+  });
   return localStream;
 }
 
@@ -1237,17 +1176,10 @@ async function fillCameraSelect() {
 
 async function startLocalStream() {
   try {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const hasVideo = devices.some(d => d.kind === 'videoinput');
-    
-    if (!hasVideo) {
-      alert("No camera detected on this device.");
-      return;
-    }
-
     setInfoMsg("startLocalStream");
     await getLocalStreamOnce();
 
+    const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter(d => d.kind === "videoinput");
     const select = document.getElementById("cameraSelect");
 
@@ -1264,30 +1196,28 @@ async function startLocalStream() {
 
 let lastCameraId = null;
 
+// ? KRITISCH: startLocalStreamAndOffer muss Tracks zur PeerConnection hinzufügen
 async function startLocalStreamAndOffer() {
   try {
     setInfoMsg("startLocalStreamAndOffer");
 
     const select = document.getElementById('cameraSelect');
-    // If a specific ID is selected, use it; otherwise just ask for any video
     const videoConstraints = select.value ? { deviceId: { exact: select.value } } : true;
 
-    // Replace the old newStream assignment with this:
-    let newStream;
-    try {
-      newStream = await navigator.mediaDevices.getUserMedia({
-        video: videoConstraints,
-        audio: audioSetting // Uses your global audio state
-      });
-    } catch (e) {
-      setInfoMsg("Requested hardware config not found, falling back...");
-      newStream = await navigator.mediaDevices.getUserMedia({
-        video: true, // Generic video
-        audio: false 
-      });
+    // Prüfen ob bereits die gleiche Kamera aktiv ist
+    if (localStream && localStream.active) {
+      const currentVideoTrack = localStream.getVideoTracks()[0];
+      if (currentVideoTrack && currentVideoTrack.getSettings().deviceId === select.value) {
+        setInfoMsg("Same camera already active");
+//        return;
+      }
     }
-    
-    // ... rest of your existing track replacement logic ...
+
+    const newStream = await navigator.mediaDevices.getUserMedia({
+      video: videoConstraints,
+      audio: true
+    });
+
     const newVideoTrack = newStream.getVideoTracks()[0];
     const newAudioTrack = newStream.getAudioTracks()[0];
 

@@ -622,30 +622,30 @@ function createPeerConnection(servers) {
     if (!e.track) return;
     setInfoMsg(`[DEBUG] Incoming track: ${e.track.kind}`);
  
-if (e.track.kind === "video") {
-  if (!remoteVideo.srcObject) {
-    remoteVideo.srcObject = new MediaStream();
-  }
-  
-  // Track hinzufügen
-  remoteVideo.srcObject.addTrack(e.track);
-  
-  // Nur ein einziger, sauberer Play-Aufruf:
-  remoteVideo.play()
-    .then(() => {
-      setInfoMsg("Video started - showing meter");
-      document.getElementById("audioMeterContainer").style.display = "block";
-    })
-    .catch(err => {
-      // AbortError ignorieren, da er nur bedeutet, dass ein neuerer Request Vorrang hat
-      if (err.name !== "AbortError") {
-        console.warn("Autoplay blocked:", err);
-        setInfoMsg("Click anywhere to start video");
+    if (e.track.kind === "video") {
+      if (!remoteVideo.srcObject) {
+        remoteVideo.srcObject = new MediaStream();
       }
-    });
-    
-  setInfoMsg("Receiving VIDEO");
-}
+      
+      // Track hinzufügen
+      remoteVideo.srcObject.addTrack(e.track);
+      
+      // Nur ein einziger, sauberer Play-Aufruf:
+      remoteVideo.play()
+        .then(() => {
+          setInfoMsg("Video started - showing meter");
+          document.getElementById("audioMeterContainer").style.display = "block";
+        })
+        .catch(err => {
+          // AbortError ignorieren, da er nur bedeutet, dass ein neuerer Request Vorrang hat
+          if (err.name !== "AbortError") {
+            console.warn("Autoplay blocked:", err);
+            setInfoMsg("Click anywhere to start video");
+          }
+        });
+        
+      setInfoMsg("Receiving VIDEO");
+    }
 
     if (e.track.kind === "audio") {
         const audioEl = document.getElementById("remoteAudio");
@@ -1146,6 +1146,23 @@ async function startReceiver() {
   };
   console.log("### startReceiver END reached ###");
 
+  // --- NEU: Sicherheitsebene für Video-Erzwingung ---
+  if (remoteVideo) {
+    // Falls der Browser Autoplay blockiert, hilft oft ein Klick des Nutzers
+    const forcePlay = () => {
+      if (remoteVideo.paused && remoteVideo.srcObject) {
+        remoteVideo.play()
+          .then(() => {
+            setInfoMsg("Video erzwungen durch Interaktion");
+            window.removeEventListener('click', forcePlay);
+          })
+          .catch(e => console.log("Play-Versuch fehlgeschlagen:", e));
+      }
+    };
+    window.addEventListener('click', forcePlay);
+  } 
+
+  
   setInfoMsg("[SYNC] sending receiverReady");
   ws.send(JSON.stringify({
     type: "receiverReady",
@@ -1220,6 +1237,14 @@ async function fillCameraSelect() {
 
 async function startLocalStream() {
   try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const hasVideo = devices.some(d => d.kind === 'videoinput');
+    
+    if (!hasVideo) {
+      alert("No camera detected on this device.");
+      return;
+    }
+
     setInfoMsg("startLocalStream");
     await getLocalStreamOnce();
 

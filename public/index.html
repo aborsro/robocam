@@ -1248,7 +1248,6 @@ async function startLocalStream() {
     setInfoMsg("startLocalStream");
     await getLocalStreamOnce();
 
-    const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter(d => d.kind === "videoinput");
     const select = document.getElementById("cameraSelect");
 

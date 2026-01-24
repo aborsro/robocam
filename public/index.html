@@ -269,15 +269,48 @@ video {
   pointer-events: none;
 }
 
+/* Bestehende Klasse aktualisieren */
 .fullwidth {
-  max-width: 100% !important;
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: contain;
+  position: fixed !important; /* Löst das Video aus dem normalen Layout */
+  top: 0;
+  left: 0;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  object-fit: cover; /* WICHTIG: Füllt die Höhe aus, ohne zu zerren */
+  z-index: 9999;
+  border: none !important;
+  border-radius: 0 !important;
 }
 
-  .inline-container img { vertical-align: middle; height: 40px; }
-  .inline-container span { vertical-align: middle; margin-left: 10px; font-size: 30px; }
+/* Verhindert Scrollen, wenn das Video den ganzen Bildschirm füllt */
+body:has(.fullwidth) {
+  overflow: hidden;
+  padding: 0;
+}
+
+/* Damit der Button über dem Video sichtbar bleibt */
+#controls {
+  position: relative;
+  z-index: 10000;
+}
+
+.inline-container {
+  display: flex;       /* Nutze Flexbox für bessere Kontrolle */
+  align-items: center; /* Zentriert Icon und Text vertikal perfekt */
+  margin-bottom: 10px;
+}
+
+.inline-container img { 
+  height: 40px; 
+  width: auto;         /* Verhindert Verzerrungen */
+}
+
+.inline-container span { 
+  margin-left: 10px; 
+  font-size: 30px; 
+  font-weight: bold;   /* Optional: Damit es markanter aussieht */
+}
 
 </style>
 
@@ -305,7 +338,7 @@ video {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>v97
+   <span>robocam</span>x01
    <input type="text" id="infoMsg" style="margin-left: 10px;">
    <input type="text" id="infoMode" style="margin-left: 10px;">
   </div>
@@ -594,7 +627,7 @@ function createPeerConnection(servers) {
         remoteVideo.srcObject = new MediaStream();
       }
       remoteVideo.srcObject.addTrack(e.track);
- //     safePlay(remoteVideo);
+      safePlay(remoteVideo);
 	  // Explicitly call play to ensure the 'onplaying' event fires
         remoteVideo.play()
             .then(() => {
@@ -1134,10 +1167,15 @@ async function startReceiver() {
 async function getLocalStreamOnce() {
   if (localStream) return localStream;
   setInfoMsg("getLocalStreamOnce: acquiring media...");
-  localStream = await navigator.mediaDevices.getUserMedia({
-    video: true,
-    audio: true
-  });
+  
+  try {
+    // Attempt both first
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+  } catch (err) {
+    console.warn("Full AV access failed, trying video only...", err);
+    // Fallback to video only if a microphone is missing
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+  }
   return localStream;
 }
 
@@ -1196,28 +1234,30 @@ async function startLocalStream() {
 
 let lastCameraId = null;
 
-// ? KRITISCH: startLocalStreamAndOffer muss Tracks zur PeerConnection hinzufügen
 async function startLocalStreamAndOffer() {
   try {
     setInfoMsg("startLocalStreamAndOffer");
 
     const select = document.getElementById('cameraSelect');
+    // If a specific ID is selected, use it; otherwise just ask for any video
     const videoConstraints = select.value ? { deviceId: { exact: select.value } } : true;
 
-    // Prüfen ob bereits die gleiche Kamera aktiv ist
-    if (localStream && localStream.active) {
-      const currentVideoTrack = localStream.getVideoTracks()[0];
-      if (currentVideoTrack && currentVideoTrack.getSettings().deviceId === select.value) {
-        setInfoMsg("Same camera already active");
-//        return;
-      }
+    // Replace the old newStream assignment with this:
+    let newStream;
+    try {
+      newStream = await navigator.mediaDevices.getUserMedia({
+        video: videoConstraints,
+        audio: audioSetting // Uses your global audio state
+      });
+    } catch (e) {
+      setInfoMsg("Requested hardware config not found, falling back...");
+      newStream = await navigator.mediaDevices.getUserMedia({
+        video: true, // Generic video
+        audio: false 
+      });
     }
-
-    const newStream = await navigator.mediaDevices.getUserMedia({
-      video: videoConstraints,
-      audio: true
-    });
-
+    
+    // ... rest of your existing track replacement logic ...
     const newVideoTrack = newStream.getVideoTracks()[0];
     const newAudioTrack = newStream.getAudioTracks()[0];
 

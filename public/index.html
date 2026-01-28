@@ -338,7 +338,7 @@ body:has(.fullwidth) {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>x01
+   <span>robocam</span>x02
    <input type="text" id="infoMsg" style="margin-left: 10px;">
    <input type="text" id="infoMode" style="margin-left: 10px;">
   </div>
@@ -561,7 +561,8 @@ document.getElementById('localVideo').style.display = 'none';
 document.getElementById("localStatus").style.display = "none";
 document.getElementById("remoteStatus").style.display = "none";
 
-const iceServers = [
+
+const iceServersOLD = [
   {
     urls: [
       "stun:fr-turn3.xirsys.com",
@@ -591,8 +592,8 @@ async function processIceCandidateQueue() {
   }
 }
 
-function createPeerConnection(servers) {
-  pc = new RTCPeerConnection({ iceServers: servers });
+function createPeerConnection(config) {
+  pc = new RTCPeerConnection(config);
 
   pc.oniceconnectionstatechange = () => {
     if (!pc) return;
@@ -618,64 +619,60 @@ function createPeerConnection(servers) {
     setInfoMsg("[UI] Stream active - Audio meter visible");
   };
 
+  
   pc.ontrack = e => {
     if (!e.track) return;
+    
+    const remoteVideo = document.getElementById("remoteVideo");
+    const remoteAudio = document.getElementById("remoteAudio");
+    
     setInfoMsg(`[DEBUG] Incoming track: ${e.track.kind}`);
- 
+
+    // Wir nutzen e.streams[0], das ist der Standard-Stream vom Sender
+    const incomingStream = e.streams[0];
+
     if (e.track.kind === "video") {
-      if (!remoteVideo.srcObject) {
-        remoteVideo.srcObject = new MediaStream();
-      }
-      
-      // Track hinzufügen
-      remoteVideo.srcObject.addTrack(e.track);
-      
-      // Nur ein einziger, sauberer Play-Aufruf:
-      remoteVideo.play()
-        .then(() => {
-          setInfoMsg("Video started - showing meter");
-          document.getElementById("audioMeterContainer").style.display = "block";
-        })
-        .catch(err => {
-          // AbortError ignorieren, da er nur bedeutet, dass ein neuerer Request Vorrang hat
-          if (err.name !== "AbortError") {
-            console.warn("Autoplay blocked:", err);
-            setInfoMsg("Click anywhere to start video");
-          }
-        });
+        // Dem Video-Element den gesamten Stream zuweisen
+        remoteVideo.srcObject = incomingStream;
         
-      setInfoMsg("Receiving VIDEO");
+        remoteVideo.play()
+            .then(() => {
+                setInfoMsg("Video started");
+                document.getElementById("audioMeterContainer").style.display = "block";
+            })
+            .catch(err => {
+                if (err.name !== "AbortError") {
+                    console.warn("Autoplay blocked:", err);
+                    setInfoMsg("Click to start video");
+                }
+            });
+        setInfoMsg("Receiving VIDEO");
     }
 
     if (e.track.kind === "audio") {
-        const audioEl = document.getElementById("remoteAudio");
-        audioEl.srcObject = e.streams[0];
+        // Dem Audio-Element ebenfalls den Stream zuweisen
+        remoteAudio.srcObject = incomingStream;
         
-        // Apply the current mute/unmute toggle state immediately
         applyReceiverAudio(); 
         
         if (typeof attachAudioAnalyzer === "function") {
-            attachAudioAnalyzer(e.streams[0]);
+            attachAudioAnalyzer(incomingStream);
         }
 
-       // Autoplay Fix: Browser blockieren Audio oft
-       audioEl.play().catch(err => {
-         console.warn("Audio autoplay blocked:", err);
-         setInfoMsg("AUDIO BLOCKED - Click anywhere to unmute");
-         
-         // Einmaliger Click-Handler, um Audio zu aktivieren
-         const unlockAudio = () => {
-           audioEl.play();
-           setInfoMsg("Audio unmuted by user");
-           window.removeEventListener('click', unlockAudio);
-         };
-         window.addEventListener('click', unlockAudio);
-       });
+        remoteAudio.play().catch(err => {
+            console.warn("Audio blocked:", err);
+            const unlockAudio = () => {
+                remoteAudio.play();
+                window.removeEventListener('click', unlockAudio);
+            };
+            window.addEventListener('click', unlockAudio);
+        });
+        setInfoMsg("Receiving AUDIO");
     }
-    setInfoMsg("Receiving AUDIO");
   }
   return pc;
-}
+}; 
+  
 
 function connectWebSocket() {
   const wsProtocol = location.protocol === "https:" ? "wss" : "ws";
@@ -964,39 +961,54 @@ async function start(role) {
 }
   
 function determineConnectionType() {
-  pc.addEventListener("iceconnectionstatechange", async () => {
-    if (pc.iceConnectionState === "connected") {
-      try {
-        const stats = await pc.getStats();
-        stats.forEach(report => {
-          if (report.type === "candidate-pair" && report.state === "succeeded") {
-            const local = stats.get(report.localCandidateId);
-            const remote = stats.get(report.remoteCandidateId);
-  
-            if (local && remote) {
-              let connectionType = "Unknown connection";
-  
-              if (local.candidateType === "relay" || remote.candidateType === "relay") {
-                connectionType = "TURN connection active";
-                console.log("? TURN server in use (relay)");
-              } else if (local.candidateType === "srflx" || remote.candidateType === "srflx") {
-                connectionType = "STUN connection active";
-                console.log("? STUN server in use (srflx)");
-              } else if (local.candidateType === "host" || remote.candidateType === "host") {
-                connectionType = "Direct P2P connection";
-                console.log("? Direct peer-to-peer (host)");
-              }
-  
-              const infoField = document.getElementById("infoMode");
-              if (infoField) infoField.value = connectionType;
-            }
-          }
-        });
-      } catch (err) {
-        console.error("Error checking ICE candidates:", err);
-      }
+    // Falls pc noch nicht existiert, Funktion abbrechen
+    if (!pc) {
+        console.warn("determineConnectionType: pc ist noch nicht initialisiert.");
+        return;
     }
-  });
+
+    const checkIceState = () => {
+        if (!pc) return; // Sicherheit, falls pc zwischendurch gelöscht wurde
+        
+        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+            pc.getStats(null).then(stats => {
+                let report = "";
+                stats.forEach(reportItem => {
+                    if (reportItem.type === 'remote-candidate') {
+                        report = "Conn: " + reportItem.candidateType; // e.g., relay, srflx, host
+                    }
+                });
+                if (report) {
+                    setInfoMsg(report);
+                    // Entferne den Listener wieder, wenn Verbindung steht
+                    pc.removeEventListener('iceconnectionstatechange', checkIceState);
+                }
+            });
+        }
+    };
+
+    // Event Listener sicher hinzufügen
+    pc.addEventListener('iceconnectionstatechange', checkIceState);
+    // Einmal sofort prüfen, falls sie schon verbunden ist
+    checkIceState();
+}  
+  
+  
+
+// request ICE Servers
+
+async function getIceServers() {
+    try {
+        const response = await fetch('/get-turn-credentials');
+        const data = await response.json();
+        return {
+            iceServers: data.v ? data.v.iceServers : data.iceServers,
+            iceTransportPolicy: 'all' // 'relay' nur zum Testen von TURN erzwingen
+        };
+    } catch (e) {
+        console.error("Failed to fetch ICE servers, using fallback", e);
+        return { iceServers: [] }; // Fallback auf STUN/Direkt
+    }
 }
 
 async function startSender() {
@@ -1011,8 +1023,10 @@ async function startSender() {
 
   stopBtn.style.display = 'block';
   setAppState(ConnectionState.WAITING);
-
-  pc = createPeerConnection(iceServers); 
+  
+  // Warten auf die Konfiguration, bevor pc erstellt wird
+  const config = await getIceServers(); 
+  pc = createPeerConnection(config); 
   determineConnectionType();
 
   pc.onnegotiationneeded = async () => {
@@ -1087,8 +1101,11 @@ async function startReceiver() {
  
   stopBtn.style.display = 'block';
   setAppState(ConnectionState.WAITING);
+  
+  // Warten auf die Konfiguration, bevor pc erstellt wird
+  const config = await getIceServers(); 
+  pc = createPeerConnection(config); 
 
-  pc = createPeerConnection(iceServers); 
   determineConnectionType();
 
   // ensure no old interval is running

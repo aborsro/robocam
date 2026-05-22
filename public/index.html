@@ -338,7 +338,7 @@ body:has(.fullwidth) {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>x02-test
+   <span>robocam</span>x02
    <input type="text" id="infoMsg" style="margin-left: 10px;">
    <input type="text" id="infoMode" style="margin-left: 10px;">
   </div>
@@ -1025,25 +1025,7 @@ async function startSender() {
   setAppState(ConnectionState.WAITING);
   
   // Warten auf die Konfiguration, bevor pc erstellt wird
-//  const config = await getIceServers(); 
- const config = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    {
-      urls: [
-        "turn:openrelay.metered.ca:80",
-        "turn:openrelay.metered.ca:443",
-        "turns:openrelay.metered.ca:443"
-      ],
-      username: "openrelayproject",
-      credential: "openrelayproject"
-    }
-  ],
-  iceTransportPolicy: "relay"
-}; 
-  
-  
-  
+  const config = await getIceServers(); 
   pc = createPeerConnection(config); 
   determineConnectionType();
 
@@ -1121,25 +1103,7 @@ async function startReceiver() {
   setAppState(ConnectionState.WAITING);
   
   // Warten auf die Konfiguration, bevor pc erstellt wird
-//  const config = await getIceServers();
-  const config = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    {
-      urls: [
-        "turn:openrelay.metered.ca:80",
-        "turn:openrelay.metered.ca:443",
-        "turns:openrelay.metered.ca:443"
-      ],
-      username: "openrelayproject",
-      credential: "openrelayproject"
-    }
-  ],
-  iceTransportPolicy: "relay"
-};
-  
-  
-  
+  const config = await getIceServers(); 
   pc = createPeerConnection(config); 
 
   determineConnectionType();

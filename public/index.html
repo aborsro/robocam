@@ -271,32 +271,32 @@ video {
 
 /* Bestehende Klasse aktualisieren */
 .fullwidth {
-  position: fixed !important; /* Löst das Video aus dem normalen Layout */
+  position: fixed !important; /* L st das Video aus dem normalen Layout */
   top: 0;
   left: 0;
   width: 100vw !important;
   height: 100vh !important;
   max-width: none !important;
-  object-fit: cover; /* WICHTIG: Füllt die Höhe aus, ohne zu zerren */
+  object-fit: cover; /* WICHTIG: F llt die H he aus, ohne zu zerren */
   z-index: 9999;
   border: none !important;
   border-radius: 0 !important;
 }
 
-/* Verhindert Scrollen, wenn das Video den ganzen Bildschirm füllt */
+/* Verhindert Scrollen, wenn das Video den ganzen Bildschirm f llt */
 body:has(.fullwidth) {
   overflow: hidden;
   padding: 0;
 }
 
-/* Damit der Button über dem Video sichtbar bleibt */
+/* Damit der Button  ber dem Video sichtbar bleibt */
 #controls {
   position: relative;
   z-index: 10000;
 }
 
 .inline-container {
-  display: flex;       /* Nutze Flexbox für bessere Kontrolle */
+  display: flex;       /* Nutze Flexbox f r bessere Kontrolle */
   align-items: center; /* Zentriert Icon und Text vertikal perfekt */
   margin-bottom: 10px;
 }
@@ -310,6 +310,30 @@ body:has(.fullwidth) {
   margin-left: 10px; 
   font-size: 30px; 
   font-weight: bold;   /* Optional: Damit es markanter aussieht */
+}
+
+
+
+/* ==============================
+   WIDE MODE AUTO-HIDE UI
+   ============================== */
+body.wide-mode .top-bar {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 10001; /* Keep it above the 9999 z-index of your fullwidth video */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease-in-out;
+  background: rgba(0, 0, 0, 0.5); /* Optional: dark background to make buttons pop over video */
+  padding: 10px;
+  border-radius: 12px;
+}
+
+/* When the screen is touched, we add this class to show the buttons */
+body.wide-mode.show-ui .top-bar {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 </style>
@@ -338,7 +362,7 @@ body:has(.fullwidth) {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>x02
+   <span>robocam</span>x03
    <input type="text" id="infoMsg" style="margin-left: 10px;">
    <input type="text" id="infoMode" style="margin-left: 10px;">
   </div>
@@ -394,7 +418,7 @@ let idleRestartTimer = null;
 let isNegotiating = false;
 let makingOffer = false;
 let polite = false;
-let iceCandidateQueue = []; // ? NEU: Queue für frühe ICE candidates
+let iceCandidateQueue = []; // ? NEU: Queue f r fr he ICE candidates
 
 // --- Integrated Audio Control ---
 let audioSetting = true; // For Sender (Mic)
@@ -453,13 +477,19 @@ function applyReceiverAudio() {
 // Call this immediately
 initAudioUI();
 
+
 toggleBtn.onclick = () => {
   full = !full;
   if (full) {
+    document.body.classList.add("wide-mode");
+    document.body.classList.add("show-ui"); // Show buttons initially
     localVideo.classList.add("fullwidth");
     remoteVideo.classList.add("fullwidth");
     toggleBtn.textContent = "ðŸ”™ normal";
+    startUIHideTimer(); // Start the countdown to hide them
   } else {
+    document.body.classList.remove("wide-mode");
+    document.body.classList.remove("show-ui");
     localVideo.classList.remove("fullwidth");
     remoteVideo.classList.remove("fullwidth");
     toggleBtn.textContent = "ðŸ“º wide";
@@ -512,7 +542,7 @@ async function changePassword() {
     document.getElementById("changeForm").style.display = "none";
     document.getElementById('password').value = "";
   } catch (err) {
-    console.error("Passwort-Änderung Fehler:", err);
+    console.error("Passwort- nderung Fehler:", err);
     document.getElementById("changeMsg").innerText = "Serverfehler!";
   }
 }
@@ -689,7 +719,7 @@ function connectWebSocket() {
   ws.onerror = e => console.error("[DEBUG] WebSocket Error:", e);
 
   ws.onclose = () => {
-    console.warn("[DEBUG] WebSocket closed – try reconnect ...");
+    console.warn("[DEBUG] WebSocket closed   try reconnect ...");
 	setInfoMsg("websocket try reconnect");
     setAppState(ConnectionState.NOTCONNECTED);
     setTimeout(() => {
@@ -844,10 +874,10 @@ async function handleMessage(msg) {
 
       if (offerCollision) {
         if (!polite) {
-          setInfoMsg("[DEBUG] Offer collision – ignored (impolite peer)");
+          setInfoMsg("[DEBUG] Offer collision   ignored (impolite peer)");
           return;
         }
-        setInfoMsg("[DEBUG] Offer collision – polite peer: rollback local offer");
+        setInfoMsg("[DEBUG] Offer collision   polite peer: rollback local offer");
         try {
           await pc.setLocalDescription({ type: "rollback" });
           makingOffer = false;
@@ -862,7 +892,7 @@ async function handleMessage(msg) {
           setInfoMsg("[DEBUG] Answer accepted");
           await processIceCandidateQueue();
         } else {
-          console.warn("Answer ignored – wrong signaling state:", pc.signalingState);
+          console.warn("Answer ignored   wrong signaling state:", pc.signalingState);
         }
         return;
       }
@@ -924,7 +954,7 @@ async function start(role) {
   myRole = role;
   polite = (role === 'receiver');
   
-  // ? NEU: ICE-Queue zurücksetzen bei neuem Start
+  // ? NEU: ICE-Queue zur cksetzen bei neuem Start
   iceCandidateQueue = [];
   
   if (ws.readyState === WebSocket.OPEN) {
@@ -968,7 +998,7 @@ function determineConnectionType() {
     }
 
     const checkIceState = () => {
-        if (!pc) return; // Sicherheit, falls pc zwischendurch gelöscht wurde
+        if (!pc) return; // Sicherheit, falls pc zwischendurch gel scht wurde
         
         if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
             pc.getStats(null).then(stats => {
@@ -987,9 +1017,9 @@ function determineConnectionType() {
         }
     };
 
-    // Event Listener sicher hinzufügen
+    // Event Listener sicher hinzuf gen
     pc.addEventListener('iceconnectionstatechange', checkIceState);
-    // Einmal sofort prüfen, falls sie schon verbunden ist
+    // Einmal sofort pr fen, falls sie schon verbunden ist
     checkIceState();
 }  
   
@@ -1032,7 +1062,7 @@ async function startSender() {
   pc.onnegotiationneeded = async () => {
     try {
       makingOffer = true;
-      setInfoMsg("[DEBUG] Negotiation needed – creating offer");
+      setInfoMsg("[DEBUG] Negotiation needed   creating offer");
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       ws.send(JSON.stringify({ sdp: pc.localDescription }));
@@ -1075,7 +1105,7 @@ async function startSender() {
     }
   };
 
-  // ? WICHTIG: Erst Local Stream starten, DANN Tracks hinzufügen
+  // ? WICHTIG: Erst Local Stream starten, DANN Tracks hinzuf gen
   const select = document.getElementById('cameraSelect');
   select.style.display = 'block';
   await startLocalStream();
@@ -1114,7 +1144,7 @@ async function startReceiver() {
     readyInterval = null;
   }
 
-  // Dann Transceiver hinzufügen
+  // Dann Transceiver hinzuf gen
   setInfoMsg("[DEBUG] Receiver: adding recvonly transceivers");
   pc.addTransceiver("video", { direction: "recvonly" });
   pc.addTransceiver("audio", { direction: "recvonly" });
@@ -1163,7 +1193,7 @@ async function startReceiver() {
   };
   console.log("### startReceiver END reached ###");
 
-  // --- NEU: Sicherheitsebene für Video-Erzwingung ---
+  // --- NEU: Sicherheitsebene f r Video-Erzwingung ---
   if (remoteVideo) {
     // Falls der Browser Autoplay blockiert, hilft oft ein Klick des Nutzers
     const forcePlay = () => {
@@ -1197,10 +1227,10 @@ async function startReceiver() {
     }
   }, 1000);
   
-  // Am Ende von startReceiver() einfügen:
+  // Am Ende von startReceiver() einf gen:
   const remoteAudio = document.getElementById("remoteAudio");
   if (remoteAudio) {
-    remoteAudio.muted = isAudioMuted; // Übernimmt den aktuellen Button-Status
+    remoteAudio.muted = isAudioMuted; //  bernimmt den aktuellen Button-Status
   }
 }
 
@@ -1382,7 +1412,7 @@ function applyAudioStatus() {
     }
 
     // 2. Aktion: BEIDE Elemente (Video & Audio) stummschalten
-    // Manchmal kommt der Ton über das Video-Element mit!
+    // Manchmal kommt der Ton  ber das Video-Element mit!
     [remoteAudio, remoteVideo].forEach(el => {
         if (el) {
             el.muted = isAudioMuted;
@@ -1415,7 +1445,7 @@ function stopAll() {
   const infoField = document.getElementById("infoMode");
   infoField.value = "";
  
- // Audio-Balken zurücksetzen
+ // Audio-Balken zur cksetzen
   const bar = document.getElementById('audioMeterBar');
   if (bar) bar.style.width = "0%";
   setInfoMsg("Stopped and Meter reset");
@@ -1454,7 +1484,7 @@ function stopAll() {
     pc = null;
   }
   
-  // ? OPTIMIERT: LocalStream vollständig stoppen
+  // ? OPTIMIERT: LocalStream vollst ndig stoppen
   if (localStream) {
     localStream.getTracks().forEach(t => {
       t.stop();
@@ -1463,7 +1493,7 @@ function stopAll() {
     localStream = null;
   }
   
-  // ? NEU: ICE-Queue zurücksetzen
+  // ? NEU: ICE-Queue zur cksetzen
   iceCandidateQueue = [];
   
   const senderBtn = document.getElementById('senderBtn');
@@ -1515,7 +1545,7 @@ function attachAudioAnalyzer(stream) {
       bar.style.backgroundColor = isAudioMuted ? "#ff4444" : "#00FF00";
     }
     function updateMeter() {
-      // Prüfen, ob der Stream oder Tracks gestoppt wurden
+      // Pr fen, ob der Stream oder Tracks gestoppt wurden
       const isStreamActive = stream.active && stream.getAudioTracks().some(t => t.readyState === 'live');
       
       if (!bar) return;
@@ -1534,7 +1564,7 @@ function attachAudioAnalyzer(stream) {
       }
       let average = sum / bufferLength;
       
-      // Balken aktualisieren (Sensibilität: average * 2)
+      // Balken aktualisieren (Sensibilit t: average * 2)
       bar.style.width = Math.min(100, (average * 2.5)) + "%";
       requestAnimationFrame(updateMeter);
     }
@@ -1544,6 +1574,34 @@ function attachAudioAnalyzer(stream) {
   }
   document.getElementById("audioBtn").onclick = toggleAudio;
 }
+
+
+// --- AUTO-HIDE UI LOGIC ---
+let uiTimeout;
+
+function wakeUpUI() {
+  // Only apply this logic if we are actually in wide mode
+  if (!full) return; 
+  
+  document.body.classList.add('show-ui');
+  startUIHideTimer();
+}
+
+function startUIHideTimer() {
+  clearTimeout(uiTimeout);
+  // Hide the buttons after 3 seconds of inactivity
+  uiTimeout = setTimeout(() => {
+    if (full) {
+      document.body.classList.remove('show-ui');
+    }
+  }, 1000); 
+}
+
+// Listen for touches (mobile) or mouse movements/clicks (desktop)
+document.addEventListener('touchstart', wakeUpUI);
+document.addEventListener('mousemove', wakeUpUI);
+document.addEventListener('click', wakeUpUI);
+
 </script>
 </body>
 </html>

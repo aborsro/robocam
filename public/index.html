@@ -362,7 +362,7 @@ body.wide-mode.show-ui .top-bar {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>x03
+   <span>robocam</span>x04
    <input type="text" id="infoMsg" style="margin-left: 10px;">
    <input type="text" id="infoMode" style="margin-left: 10px;">
   </div>
@@ -478,21 +478,38 @@ function applyReceiverAudio() {
 initAudioUI();
 
 
-toggleBtn.onclick = () => {
+toggleBtn.onclick = async () => {
   full = !full;
   if (full) {
-    document.body.classList.add("wide-mode");
-    document.body.classList.add("show-ui"); // Show buttons initially
     localVideo.classList.add("fullwidth");
     remoteVideo.classList.add("fullwidth");
     toggleBtn.textContent = "🔙 normal";
-    startUIHideTimer(); // Start the countdown to hide them
+
+    // Startet den echten Vollbildmodus ohne Browser-Leisten
+    try {
+      if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+      } else if (document.documentElement.webkitRequestFullscreen) {
+        // Wichtig für iOS / Safari auf dem iPhone
+        await document.documentElement.webkitRequestFullscreen();
+      }
+    } catch (err) {
+      console.log("Vollbildmodus wurde blockiert oder nicht unterstützt:", err);
+    }
   } else {
-    document.body.classList.remove("wide-mode");
-    document.body.classList.remove("show-ui");
     localVideo.classList.remove("fullwidth");
     remoteVideo.classList.remove("fullwidth");
     toggleBtn.textContent = "📺 wide";
+
+    // Beendet den Vollbildmodus
+    try {
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        if (document.exitFullscreen) await document.exitFullscreen();
+        else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
+      }
+    } catch (err) {
+      console.log("Fehler beim Verlassen des Vollbildmodus:", err);
+    }
   }
 };
 
@@ -779,12 +796,31 @@ function exitBlackout() {
 // Crucial for iPhone: Tap the black screen to get back
 document.getElementById('blackoutArea').onclick = exitBlackout;
 
-// Handle the "Esc" key on PC
+// Erkennt, wenn der Vollbildmodus (egal wie) beendet wurde
 document.addEventListener('fullscreenchange', () => {
-    if (!document.fullscreenElement) exitBlackout();
+    if (!document.fullscreenElement) {
+        exitBlackout(); // Bestehende Blackout-Funktion
+        
+        // Falls wir im Wide-Modus waren, setzen wir das UI zurück
+        if (full) {
+            full = false;
+            localVideo.classList.remove("fullwidth");
+            remoteVideo.classList.remove("fullwidth");
+            toggleBtn.textContent = "📺 wide";
+        }
+    }
 });
+
 document.addEventListener('webkitfullscreenchange', () => {
-    if (!document.webkitFullscreenElement) exitBlackout();
+    if (!document.webkitFullscreenElement) {
+        exitBlackout();
+        if (full) {
+            full = false;
+            localVideo.classList.remove("fullwidth");
+            remoteVideo.classList.remove("fullwidth");
+            toggleBtn.textContent = "📺 wide";
+        }
+    }
 });
 
 function setAudioTracks(state) {

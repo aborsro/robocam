@@ -362,7 +362,7 @@ body.wide-mode.show-ui .top-bar {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>x05
+   <span>robocam</span>x03
    <input type="text" id="infoMsg" style="margin-left: 10px;">
    <input type="text" id="infoMode" style="margin-left: 10px;">
   </div>
@@ -478,38 +478,21 @@ function applyReceiverAudio() {
 initAudioUI();
 
 
-toggleBtn.onclick = async () => {
+toggleBtn.onclick = () => {
   full = !full;
   if (full) {
+    document.body.classList.add("wide-mode");
+    document.body.classList.add("show-ui"); // Show buttons initially
     localVideo.classList.add("fullwidth");
     remoteVideo.classList.add("fullwidth");
     toggleBtn.textContent = "ðŸ”™ normal";
-
-    // Startet den echten Vollbildmodus ohne Browser-Leisten
-    try {
-      if (document.documentElement.requestFullscreen) {
-        await document.documentElement.requestFullscreen();
-      } else if (document.documentElement.webkitRequestFullscreen) {
-        // Wichtig fÃ¼r iOS / Safari auf dem iPhone
-        await document.documentElement.webkitRequestFullscreen();
-      }
-    } catch (err) {
-      console.log("Vollbildmodus wurde blockiert oder nicht unterstÃ¼tzt:", err);
-    }
+    startUIHideTimer(); // Start the countdown to hide them
   } else {
+    document.body.classList.remove("wide-mode");
+    document.body.classList.remove("show-ui");
     localVideo.classList.remove("fullwidth");
     remoteVideo.classList.remove("fullwidth");
     toggleBtn.textContent = "ðŸ“º wide";
-
-    // Beendet den Vollbildmodus
-    try {
-      if (document.fullscreenElement || document.webkitFullscreenElement) {
-        if (document.exitFullscreen) await document.exitFullscreen();
-        else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
-      }
-    } catch (err) {
-      console.log("Fehler beim Verlassen des Vollbildmodus:", err);
-    }
   }
 };
 
@@ -796,31 +779,12 @@ function exitBlackout() {
 // Crucial for iPhone: Tap the black screen to get back
 document.getElementById('blackoutArea').onclick = exitBlackout;
 
-// Erkennt, wenn der Vollbildmodus (egal wie) beendet wurde
+// Handle the "Esc" key on PC
 document.addEventListener('fullscreenchange', () => {
-    if (!document.fullscreenElement) {
-        exitBlackout(); // Bestehende Blackout-Funktion
-        
-        // Falls wir im Wide-Modus waren, setzen wir das UI zurÃ¼ck
-        if (full) {
-            full = false;
-            localVideo.classList.remove("fullwidth");
-            remoteVideo.classList.remove("fullwidth");
-            toggleBtn.textContent = "ðŸ“º wide";
-        }
-    }
+    if (!document.fullscreenElement) exitBlackout();
 });
-
 document.addEventListener('webkitfullscreenchange', () => {
-    if (!document.webkitFullscreenElement) {
-        exitBlackout();
-        if (full) {
-            full = false;
-            localVideo.classList.remove("fullwidth");
-            remoteVideo.classList.remove("fullwidth");
-            toggleBtn.textContent = "ðŸ“º wide";
-        }
-    }
+    if (!document.webkitFullscreenElement) exitBlackout();
 });
 
 function setAudioTracks(state) {
@@ -871,15 +835,9 @@ async function handleMessage(msg) {
     
       receiverReady = true;
     
-      if (myRole === 'sender') {
-        if (pendingSenderStart) {
-          pendingSenderStart = false;
-          startSender();   // Normaler Erststart
-        } else {
-          // FEHLERBEHEBUNG: Der Sender läuft schon, aber ein neuer Receiver ist da!
-          setInfoMsg("[SYNC] Receiver neu gestartet. Verbinde neu...");
-          rebuildSenderConnection();
-        }
+      if (pendingSenderStart && myRole === 'sender') {
+        pendingSenderStart = false;
+        startSender();   // ? jetzt wirklich starten
       }
       return;
     }
@@ -1082,31 +1040,6 @@ async function getIceServers() {
         return { iceServers: [] }; // Fallback auf STUN/Direkt
     }
 }
-
-async function rebuildSenderConnection() {
-  // 1. Alte Verbindung sauber schließen
-  if (pc) {
-    pc.close();
-  }
-  
-  // 2. Neue Verbindung mit den gleichen TURN-Servern erstellen
-  const config = await getIceServers(); 
-  pc = createPeerConnection(config); 
-  determineConnectionType();
-
-  // 3. WICHTIG: Die bereits existierenden Kamera- & Mikrofontracks wieder hinzufügen
-  if (localStream) {
-    localStream.getTracks().forEach(track => {
-      pc.addTrack(track, localStream);
-    });
-    setInfoMsg("[SYNC] Kamera-Tracks erfolgreich an neue Verbindung übergeben");
-  }
-  
-  // Durch das Hinzufügen der Tracks wird automatisch 'onnegotiationneeded' 
-  // getriggert und der Sender schickt dem neuen Receiver das Video-Angebot.
-}
-
-
 
 async function startSender() {
   setInfoMsg("start sender");
@@ -1497,6 +1430,7 @@ function toggleAudio() {
     applyAudioStatus();
 }
 
+
 // ? OPTIMIERT: Memory Leak Fix - alle Ressourcen sauber freigeben
 function stopAll() {
   setInfoMsg("stopAll");
@@ -1508,11 +1442,10 @@ function stopAll() {
   // ? NEU: Video-Elemente sauber leeren
   const localVideoEl = document.getElementById('localVideo');
   const remoteVideoEl = document.getElementById('remoteVideo');
-  
   const infoField = document.getElementById("infoMode");
-  if (infoField) infoField.value = ""; // Fix: Null-Check
+  infoField.value = "";
  
-  // Audio-Balken zurücksetzen
+ // Audio-Balken zur cksetzen
   const bar = document.getElementById('audioMeterBar');
   if (bar) bar.style.width = "0%";
   setInfoMsg("Stopped and Meter reset");
@@ -1532,7 +1465,7 @@ function stopAll() {
     remoteVideoEl.srcObject = null;
   }
   
-  if (myRole === "sender" && ws && ws.readyState === WebSocket.OPEN) {
+  if (myRole === "sender") {
     ws.send(JSON.stringify({ type: "senderStatus", active: false, roomId: ROOM_ID }));
   }
 
@@ -1551,7 +1484,7 @@ function stopAll() {
     pc = null;
   }
   
-  // ? OPTIMIERT: LocalStream vollständig stoppen
+  // ? OPTIMIERT: LocalStream vollst ndig stoppen
   if (localStream) {
     localStream.getTracks().forEach(t => {
       t.stop();
@@ -1560,33 +1493,29 @@ function stopAll() {
     localStream = null;
   }
   
-  // ? NEU: ICE-Queue zurücksetzen
+  // ? NEU: ICE-Queue zur cksetzen
   iceCandidateQueue = [];
   
   const senderBtn = document.getElementById('senderBtn');
   const receiverBtn = document.getElementById('receiverBtn');
 
-  if (senderBtn && receiverBtn) {
-    senderBtn.disabled = false;
-    receiverBtn.disabled = false;
-    senderBtn.classList.remove('active');
-    receiverBtn.classList.remove('active');
-    
-    const led = receiverBtn.querySelector('.led');
-    if (led) led.classList.remove('on');
-  }
+  senderBtn.disabled = false;
+  receiverBtn.disabled = false;
+  senderBtn.classList.remove('active');
+  receiverBtn.classList.remove('active');
   
-  if (document.getElementById('stopBtn')) document.getElementById('stopBtn').style.display = 'none';
-  if (document.getElementById('cameraSelect')) document.getElementById('cameraSelect').style.display = 'none';
-  if (document.getElementById('blackoutArea')) document.getElementById('blackoutArea').style.display = 'none';
+  const led = receiverBtn.querySelector('.led');
+  if (led) led.classList.remove('on');
+  
+  document.getElementById('stopBtn').style.display = 'none';
+  document.getElementById('cameraSelect').style.display = 'none';
+  document.getElementById('blackoutArea').style.display = 'none';
 
-  if (window.senderActive && senderBtn) {
+  if (window.senderActive) {
     senderBtn.disabled = true;
     senderBtn.textContent = "sender (locked)";
   }
 }
-
-
 
 function attemptReconnectWithDelay(seconds) {
   setInfoMsg("try reconnect");

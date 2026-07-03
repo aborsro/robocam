@@ -362,7 +362,7 @@ body.wide-mode.show-ui .top-bar {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>robocam</span>x04
+   <span>robocam</span>x05
    <input type="text" id="infoMsg" style="margin-left: 10px;">
    <input type="text" id="infoMode" style="margin-left: 10px;">
   </div>
@@ -871,9 +871,15 @@ async function handleMessage(msg) {
     
       receiverReady = true;
     
-      if (pendingSenderStart && myRole === 'sender') {
-        pendingSenderStart = false;
-        startSender();   // ? jetzt wirklich starten
+      if (myRole === 'sender') {
+        if (pendingSenderStart) {
+          pendingSenderStart = false;
+          startSender();   // Normaler Erststart
+        } else {
+          // FEHLERBEHEBUNG: Der Sender läuft schon, aber ein neuer Receiver ist da!
+          setInfoMsg("[SYNC] Receiver neu gestartet. Verbinde neu...");
+          rebuildSenderConnection();
+        }
       }
       return;
     }
@@ -1076,6 +1082,31 @@ async function getIceServers() {
         return { iceServers: [] }; // Fallback auf STUN/Direkt
     }
 }
+
+async function rebuildSenderConnection() {
+  // 1. Alte Verbindung sauber schließen
+  if (pc) {
+    pc.close();
+  }
+  
+  // 2. Neue Verbindung mit den gleichen TURN-Servern erstellen
+  const config = await getIceServers(); 
+  pc = createPeerConnection(config); 
+  determineConnectionType();
+
+  // 3. WICHTIG: Die bereits existierenden Kamera- & Mikrofontracks wieder hinzufügen
+  if (localStream) {
+    localStream.getTracks().forEach(track => {
+      pc.addTrack(track, localStream);
+    });
+    setInfoMsg("[SYNC] Kamera-Tracks erfolgreich an neue Verbindung übergeben");
+  }
+  
+  // Durch das Hinzufügen der Tracks wird automatisch 'onnegotiationneeded' 
+  // getriggert und der Sender schickt dem neuen Receiver das Video-Angebot.
+}
+
+
 
 async function startSender() {
   setInfoMsg("start sender");
@@ -1466,7 +1497,6 @@ function toggleAudio() {
     applyAudioStatus();
 }
 
-
 // ? OPTIMIERT: Memory Leak Fix - alle Ressourcen sauber freigeben
 function stopAll() {
   setInfoMsg("stopAll");
@@ -1478,10 +1508,11 @@ function stopAll() {
   // ? NEU: Video-Elemente sauber leeren
   const localVideoEl = document.getElementById('localVideo');
   const remoteVideoEl = document.getElementById('remoteVideo');
+  
   const infoField = document.getElementById("infoMode");
-  infoField.value = "";
+  if (infoField) infoField.value = ""; // Fix: Null-Check
  
- // Audio-Balken zur cksetzen
+  // Audio-Balken zurücksetzen
   const bar = document.getElementById('audioMeterBar');
   if (bar) bar.style.width = "0%";
   setInfoMsg("Stopped and Meter reset");
@@ -1501,7 +1532,7 @@ function stopAll() {
     remoteVideoEl.srcObject = null;
   }
   
-  if (myRole === "sender") {
+  if (myRole === "sender" && ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: "senderStatus", active: false, roomId: ROOM_ID }));
   }
 
@@ -1520,7 +1551,7 @@ function stopAll() {
     pc = null;
   }
   
-  // ? OPTIMIERT: LocalStream vollst ndig stoppen
+  // ? OPTIMIERT: LocalStream vollständig stoppen
   if (localStream) {
     localStream.getTracks().forEach(t => {
       t.stop();
@@ -1529,29 +1560,33 @@ function stopAll() {
     localStream = null;
   }
   
-  // ? NEU: ICE-Queue zur cksetzen
+  // ? NEU: ICE-Queue zurücksetzen
   iceCandidateQueue = [];
   
   const senderBtn = document.getElementById('senderBtn');
   const receiverBtn = document.getElementById('receiverBtn');
 
-  senderBtn.disabled = false;
-  receiverBtn.disabled = false;
-  senderBtn.classList.remove('active');
-  receiverBtn.classList.remove('active');
+  if (senderBtn && receiverBtn) {
+    senderBtn.disabled = false;
+    receiverBtn.disabled = false;
+    senderBtn.classList.remove('active');
+    receiverBtn.classList.remove('active');
+    
+    const led = receiverBtn.querySelector('.led');
+    if (led) led.classList.remove('on');
+  }
   
-  const led = receiverBtn.querySelector('.led');
-  if (led) led.classList.remove('on');
-  
-  document.getElementById('stopBtn').style.display = 'none';
-  document.getElementById('cameraSelect').style.display = 'none';
-  document.getElementById('blackoutArea').style.display = 'none';
+  if (document.getElementById('stopBtn')) document.getElementById('stopBtn').style.display = 'none';
+  if (document.getElementById('cameraSelect')) document.getElementById('cameraSelect').style.display = 'none';
+  if (document.getElementById('blackoutArea')) document.getElementById('blackoutArea').style.display = 'none';
 
-  if (window.senderActive) {
+  if (window.senderActive && senderBtn) {
     senderBtn.disabled = true;
     senderBtn.textContent = "sender (locked)";
   }
 }
+
+
 
 function attemptReconnectWithDelay(seconds) {
   setInfoMsg("try reconnect");

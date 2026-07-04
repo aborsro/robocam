@@ -6,3 +6,5 @@ Simple Node.js + WebRTC Video/Audio-Streaming App for Render.
 
 On any device a browser is needed, goto:
 robocam.onrender.com to start the app
+
+both devices (sender, receiver) must be in the same WLAN

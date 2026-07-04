@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>lillicam</title>
+<title>robocam</title>
 <style>
   body { font-family: sans-serif; display: flex; flex-direction: column; padding: 20px; background: linear-gradient(to bottom, #f4f4f4, #e0e0e0); min-height: 100vh; }
   #loginForm, #changeForm { margin-bottom: 20px;}
@@ -342,7 +342,7 @@ body.wide-mode.show-ui .top-bar {
 <body>
 
 <div id="loginForm">
-  <h2>Login for LILLICAM</h2>
+  <h2>Login for ROBOCAM</h2>
   <div class="form-row">
     <input type="password" id="password" maxlength="20" placeholder="enter password">
     <button onclick="login()">Login</button>
@@ -362,7 +362,7 @@ body.wide-mode.show-ui .top-bar {
 <div id="app">
   <div class="inline-container">
     <img src="favicon.ico" alt="App Icon" class="app-icon">
-   <span>lillicam</span>x03
+   <span>robocam</span>rev03
    <input type="text" id="infoMsg" style="margin-left: 10px;">
    <input type="text" id="infoMode" style="margin-left: 10px;">
   </div>
@@ -547,7 +547,7 @@ async function changePassword() {
   }
 }
 
-// --- lillicam Code ---
+// --- robocam Code ---
 setInfoMsg("[DEBUG] Initialising ROBOCAM App");
 
 const ConnectionState = {
